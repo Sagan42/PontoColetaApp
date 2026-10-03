@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build artifacts
+dist/
+build/
+*.tsbuildinfo
+coverage/
+
+# Expo / React Native
+.expo/
+.expo-shared/
+*.jks
+*.keystore
+!debug.keystore
+android/
+ios/
+*.aab
+*.apk
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+*.pem
+google-services.json
+service-account.json
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+!*.tfvars.example
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraform.lock.hcl.bak
+.terraform-build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# OS / editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json

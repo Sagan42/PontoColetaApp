@@ -1,0 +1,79 @@
+import { CreateCollectionPoint } from '../../modules/collection-points/application/use-cases/create-collection-point.js';
+import { GetCollectionPoint } from '../../modules/collection-points/application/use-cases/get-collection-point.js';
+import { ListCollectionPoints } from '../../modules/collection-points/application/use-cases/list-collection-points.js';
+import { SearchCollectionPointsByLocation } from '../../modules/collection-points/application/use-cases/search-collection-points-by-location.js';
+import { SearchCollectionPointsByMaterial } from '../../modules/collection-points/application/use-cases/search-collection-points-by-material.js';
+import { DynamoCollectionPointRepository } from '../../modules/collection-points/infrastructure/dynamodb/dynamo-collection-point-repository.js';
+import { NominatimGeocodingService } from '../../modules/collection-points/infrastructure/geocoding/nominatim-geocoding-service.js';
+import { UsageMetricRecorderAdapter } from '../../modules/collection-points/infrastructure/metrics/usage-metric-recorder-adapter.js';
+import type { CollectionPointUseCases } from '../../modules/collection-points/presentation/collection-point-routes.js';
+import { GetUsageMetrics } from '../../modules/metrics/application/use-cases/get-usage-metrics.js';
+import { RegisterUsageMetric } from '../../modules/metrics/application/use-cases/register-usage-metric.js';
+import { DynamoMetricsRepository } from '../../modules/metrics/infrastructure/dynamodb/dynamo-metrics-repository.js';
+import { systemClock, uuidGenerator, type Logger } from '../application/ports/index.js';
+import { loadEnvironment, type Environment } from './config/environment.js';
+import { getDocumentClient } from './dynamodb/index.js';
+import { StructuredLogger } from './logging/index.js';
+
+export interface Container {
+  readonly environment: Environment;
+  readonly logger: Logger;
+  readonly collectionPoints: CollectionPointUseCases;
+  readonly registerUsageMetric: RegisterUsageMetric;
+  readonly getUsageMetrics: GetUsageMetrics;
+}
+
+export function createContainer(environment: Environment = loadEnvironment()): Container {
+  const logger = new StructuredLogger(environment.LOG_LEVEL, {
+    environment: environment.ENVIRONMENT,
+  });
+
+  const documentClient = getDocumentClient(environment.AWS_REGION);
+  const collectionPointRepository = new DynamoCollectionPointRepository(
+    documentClient,
+    environment.TABLE_NAME,
+  );
+  const metricsRepository = new DynamoMetricsRepository(documentClient, environment.TABLE_NAME);
+
+  const registerUsageMetric = new RegisterUsageMetric(metricsRepository, systemClock);
+  const metricRecorder = new UsageMetricRecorderAdapter(registerUsageMetric);
+
+  const geocoding = new NominatimGeocodingService(
+    {
+      baseUrl: environment.GEOCODING_BASE_URL,
+      userAgent: environment.GEOCODING_USER_AGENT,
+      timeoutMs: environment.GEOCODING_TIMEOUT_MS,
+    },
+    logger,
+  );
+
+  return {
+    environment,
+    logger,
+    collectionPoints: {
+      createCollectionPoint: new CreateCollectionPoint(
+        collectionPointRepository,
+        geocoding,
+        uuidGenerator,
+        systemClock,
+        metricRecorder,
+        logger,
+      ),
+      getCollectionPoint: new GetCollectionPoint(collectionPointRepository),
+      listCollectionPoints: new ListCollectionPoints(collectionPointRepository),
+      searchByMaterial: new SearchCollectionPointsByMaterial(
+        collectionPointRepository,
+        metricRecorder,
+        logger,
+      ),
+      searchByLocation: new SearchCollectionPointsByLocation(
+        collectionPointRepository,
+        geocoding,
+        metricRecorder,
+        logger,
+      ),
+    },
+    registerUsageMetric,
+    getUsageMetrics: new GetUsageMetrics(metricsRepository, systemClock),
+  };
+}

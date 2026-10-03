@@ -1,0 +1,33 @@
+<!--
+  PontoColeta mark — vector source of truth.
+
+  The same geometry is generated programmatically by
+  mobile/scripts/generate-assets.mjs, which produces every PNG the app ships.
+  Keep both in sync when the mark changes.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" role="img" aria-label="PontoColeta">
+  <title>PontoColeta</title>
+  <rect width="100" height="100" rx="22" fill="#1B7A46" />
+  <g transform="translate(50 50) scale(0.62) translate(-50 -50)">
+    <!-- Map pin: circle plus the triangle tangent to it from the tip. -->
+    <path
+      fill="#FFFFFF"
+      d="M50 12
+         a28 28 0 1 1 -0.01 0
+         Z
+         M27.6 51.2
+         L50 95
+         L72.4 51.2
+         Z"
+    />
+    <!-- Leaf: lens of two overlapping circles, rotated 45 degrees. -->
+    <path
+      fill="#1B7A46"
+      transform="rotate(45 50 40)"
+      d="M50 20.5
+         A20 20 0 0 1 50 59.5
+         A20 20 0 0 1 50 20.5
+         Z"
+    />
+  </g>
+</svg>

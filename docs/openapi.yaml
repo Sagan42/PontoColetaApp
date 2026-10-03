@@ -1,0 +1,648 @@
+openapi: 3.1.0
+
+info:
+  title: PontoColeta API
+  version: 1.0.0
+  description: |
+    API do PontoColeta — pontos de coleta de materiais especiais em Londrina/PR.
+
+    Consultar, buscar e cadastrar são operações públicas: usuários comuns não
+    possuem conta. Apenas `/v1/admin/*` exige autenticação.
+
+    Esta especificação descreve a implementação em `backend/src`. Ela ainda não
+    foi publicada: nenhum recurso AWS foi provisionado.
+  license:
+    name: MIT
+
+servers:
+  - url: https://{apiId}.execute-api.{region}.amazonaws.com
+    description: Ambiente provisionado por Terraform (URL vem do output `api_endpoint`)
+    variables:
+      apiId:
+        default: REPLACE_WITH_API_ID
+      region:
+        default: us-east-1
+  - url: http://10.0.2.2:3000
+    description: Backend local visto pelo emulador Android
+
+tags:
+  - name: Pontos de coleta
+  - name: Materiais
+  - name: Métricas
+  - name: Administração
+  - name: Operação
+
+paths:
+  /v1/health:
+    get:
+      tags: [Operação]
+      summary: Verificação de disponibilidade
+      operationId: getHealth
+      responses:
+        '200':
+          description: Serviço disponível
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status:
+                        type: string
+                        const: ok
+
+  /v1/materials:
+    get:
+      tags: [Materiais]
+      summary: Lista os materiais sugeridos pela interface
+      description: |
+        Conveniência para a tela de cadastro. **Não** é um conjunto fechado:
+        qualquer material pode ser cadastrado.
+      operationId: listSuggestedMaterials
+      responses:
+        '200':
+          description: Lista de sugestões
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      required: [label]
+                      properties:
+                        label:
+                          type: string
+                          example: Pilhas
+
+  /v1/collection-points:
+    get:
+      tags: [Pontos de coleta]
+      summary: Lista pontos publicados, com filtro opcional por material
+      operationId: listCollectionPoints
+      parameters:
+        - name: material
+          in: query
+          required: false
+          description: Texto livre; é normalizado em slug antes da consulta.
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 40
+          example: Óleo de cozinha
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor opaco devolvido em `meta.nextCursor`.
+          schema:
+            type: string
+            maxLength: 2000
+      responses:
+        '200':
+          description: Pontos encontrados (lista vazia é resposta válida)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CollectionPoint'
+                  meta:
+                    type: object
+                    properties:
+                      count:
+                        type: integer
+                      nextCursor:
+                        type: [string, 'null']
+                      material:
+                        type: object
+                        description: Presente apenas quando `material` foi informado.
+                        properties:
+                          query:
+                            type: string
+                          slug:
+                            type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+    post:
+      tags: [Pontos de coleta]
+      summary: Cadastra um novo ponto de coleta
+      description: |
+        Operação pública, sem conta. O backend geocodifica o endereço e é a
+        fonte de verdade das coordenadas: `latitude`/`longitude` enviados pelo
+        app só são aceitos quando concordam com o endereço (até 1 km).
+      operationId: createCollectionPoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCollectionPointRequest'
+      responses:
+        '201':
+          description: Ponto cadastrado e já publicado
+          headers:
+            location:
+              description: Caminho do ponto criado
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CollectionPoint'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Já existe um ponto com o mesmo nome a menos de 150 m
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: CONFLICT
+                  message: Esse ponto de coleta já está cadastrado.
+                requestId: 8f1c0f6e-1f8f-4f2f-9a1e-1f2c3d4e5f60
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/collection-points/nearby:
+    get:
+      tags: [Pontos de coleta]
+      summary: Busca pontos próximos de um endereço ou de uma coordenada
+      description: |
+        Informe `address` **ou** o par `lat`/`lng`. GPS nunca é obrigatório.
+        O raio é limitado a 20 km (área de atendimento) e o padrão é 5 km.
+      operationId: searchNearbyCollectionPoints
+      parameters:
+        - name: address
+          in: query
+          required: false
+          schema:
+            type: string
+            minLength: 3
+            maxLength: 200
+          example: Rua Pará, 500
+        - name: lat
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: -90
+            maximum: 90
+        - name: lng
+          in: query
+          required: false
+          schema:
+            type: number
+            minimum: -180
+            maximum: 180
+        - name: radiusKm
+          in: query
+          required: false
+          schema:
+            type: number
+            exclusiveMinimum: 0
+            maximum: 50
+            default: 5
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 50
+      responses:
+        '200':
+          description: Pontos ordenados do mais próximo ao mais distante
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data, meta]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CollectionPoint'
+                  meta:
+                    type: object
+                    properties:
+                      origin:
+                        $ref: '#/components/schemas/SearchOrigin'
+                      radiusKm:
+                        type: number
+                      count:
+                        type: integer
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Endereço não pôde ser localizado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                error:
+                  code: ADDRESS_NOT_FOUND
+                  message: Não foi possível localizar esse endereço.
+                requestId: 8f1c0f6e-1f8f-4f2f-9a1e-1f2c3d4e5f60
+        '500':
+          $ref: '#/components/responses/InternalError'
+        '503':
+          $ref: '#/components/responses/ServiceUnavailable'
+
+  /v1/collection-points/{id}:
+    get:
+      tags: [Pontos de coleta]
+      summary: Detalhes de um ponto de coleta
+      operationId: getCollectionPoint
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Ponto encontrado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/CollectionPoint'
+        '404':
+          description: |
+            Ponto inexistente ou oculto. Um ponto com status `HIDDEN` é
+            indistinguível de inexistente para o público.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/metrics/events:
+    post:
+      tags: [Métricas]
+      summary: Registra um evento de uso reportável pelo app
+      description: |
+        Apenas `app_open` e `point_viewed` são aceitos. Consultas e cadastros são
+        contados pelo próprio backend quando a operação tem sucesso, o que os
+        torna confiáveis. Nenhum identificador de pessoa é enviado ou guardado.
+      operationId: registerUsageMetric
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                  enum: [app_open, point_viewed]
+      responses:
+        '202':
+          description: Evento contabilizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      accepted:
+                        type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/admin/metrics:
+    get:
+      tags: [Administração]
+      summary: Métricas agregadas de uso
+      description: |
+        Requer o token do único acesso administrativo. Informe `from` e `to`
+        juntos, ou apenas `days`.
+      operationId: getUsageMetrics
+      security:
+        - adminJwt: []
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: to
+          in: query
+          required: false
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}$'
+        - name: days
+          in: query
+          required: false
+          description: Usado quando `from`/`to` não são informados.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 366
+            default: 30
+      responses:
+        '200':
+          description: Relatório do período
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UsageMetricsReport'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Token ausente ou inválido
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Token válido, porém sem identidade utilizável
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    adminJwt:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        `IdToken` emitido pelo Amazon Cognito User Pool do ambiente. Validado
+        pelo authorizer nativo do API Gateway antes de a Lambda ser invocada.
+
+  schemas:
+    CollectionPoint:
+      type: object
+      required: [id, name, address, location, materials, status, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          example: Ecoponto Centro
+        address:
+          type: object
+          required: [line, city, state, formatted]
+          properties:
+            line:
+              type: string
+              example: Rua Pará, 500
+            city:
+              type: string
+              example: Londrina
+            state:
+              type: string
+              example: PR
+            formatted:
+              type: string
+              example: Rua Pará, 500, Londrina, PR
+        location:
+          type: object
+          required: [latitude, longitude]
+          properties:
+            latitude:
+              type: number
+              example: -23.3103
+            longitude:
+              type: number
+              example: -51.1628
+        materials:
+          type: array
+          items:
+            type: object
+            required: [label, slug]
+            properties:
+              label:
+                type: string
+                example: Óleo de cozinha
+              slug:
+                type: string
+                example: oleo-de-cozinha
+        openingHours:
+          type: [string, 'null']
+          example: Seg a Sex, 8h às 18h
+        notes:
+          type: [string, 'null']
+          example: Entrada pela lateral
+        status:
+          type: string
+          enum: [PUBLISHED, HIDDEN]
+        distanceKm:
+          type: [number, 'null']
+          description: Presente apenas em buscas por proximidade.
+          example: 1.24
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateCollectionPointRequest:
+      type: object
+      required: [name, address, materials]
+      properties:
+        name:
+          type: string
+          minLength: 3
+          maxLength: 120
+        address:
+          type: string
+          minLength: 5
+          maxLength: 200
+        materials:
+          type: array
+          minItems: 1
+          maxItems: 10
+          items:
+            type: string
+            minLength: 2
+            maxLength: 40
+        openingHours:
+          type: [string, 'null']
+          maxLength: 120
+        notes:
+          type: [string, 'null']
+          maxLength: 500
+        latitude:
+          type: number
+          description: Sugestão do app; só é usada se concordar com o endereço.
+        longitude:
+          type: number
+          description: Sugestão do app; só é usada se concordar com o endereço.
+
+    SearchOrigin:
+      type: object
+      properties:
+        latitude:
+          type: number
+        longitude:
+          type: number
+        formattedAddress:
+          type: [string, 'null']
+
+    UsageCounters:
+      type: object
+      properties:
+        app_open:
+          type: integer
+        search_address:
+          type: integer
+        search_material:
+          type: integer
+        point_created:
+          type: integer
+        point_viewed:
+          type: integer
+
+    UsageMetricsReport:
+      type: object
+      required: [period, totals, daily]
+      properties:
+        period:
+          type: object
+          properties:
+            from:
+              type: string
+            to:
+              type: string
+            days:
+              type: integer
+        totals:
+          allOf:
+            - $ref: '#/components/schemas/UsageCounters'
+            - type: object
+              properties:
+                searches:
+                  type: integer
+                  description: Soma de `search_address` e `search_material`.
+        daily:
+          type: array
+          description: Série contínua; dias sem atividade vêm com zeros.
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+              counters:
+                $ref: '#/components/schemas/UsageCounters'
+
+    Error:
+      type: object
+      required: [error, requestId]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+              enum:
+                - VALIDATION_ERROR
+                - ADDRESS_NOT_FOUND
+                - NOT_FOUND
+                - CONFLICT
+                - EXTERNAL_SERVICE_ERROR
+                - UNAUTHORIZED
+                - FORBIDDEN
+                - ROUTE_NOT_FOUND
+                - METHOD_NOT_ALLOWED
+                - INTERNAL_ERROR
+            message:
+              type: string
+              description: Escrita em português, adequada para exibição.
+            details:
+              description: Campo ou lista de campos com problema, quando aplicável.
+        requestId:
+          type: string
+          description: Mesmo identificador registrado no CloudWatch.
+
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: VALIDATION_ERROR
+              message: Dados inválidos na requisição.
+              details:
+                - field: materials
+                  message: Informe ao menos um material aceito.
+            requestId: 8f1c0f6e-1f8f-4f2f-9a1e-1f2c3d4e5f60
+
+    InternalError:
+      description: Erro inesperado. Nenhum detalhe interno é exposto.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: INTERNAL_ERROR
+              message: Não foi possível concluir a operação. Tente novamente.
+            requestId: 8f1c0f6e-1f8f-4f2f-9a1e-1f2c3d4e5f60
+
+    ServiceUnavailable:
+      description: Dependência externa indisponível (geocodificação)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: EXTERNAL_SERVICE_ERROR
+              message: Não foi possível consultar o serviço de endereços. Tente novamente.
+            requestId: 8f1c0f6e-1f8f-4f2f-9a1e-1f2c3d4e5f60

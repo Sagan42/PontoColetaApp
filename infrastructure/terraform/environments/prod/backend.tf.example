@@ -1,0 +1,18 @@
+# Remote state for the prod environment.
+#
+# NOT ACTIVE. Rename this file to backend.tf only after the bucket declared in
+# infrastructure/terraform/bootstrap/ exists, then run:
+#   terraform init -migrate-state
+#
+# Terraform 1.10+ locks state with a lock file in the bucket itself, so no
+# DynamoDB lock table is needed.
+
+terraform {
+  backend "s3" {
+    bucket       = "pontocoleta-tfstate-<account-id>"
+    key          = "prod/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
+}

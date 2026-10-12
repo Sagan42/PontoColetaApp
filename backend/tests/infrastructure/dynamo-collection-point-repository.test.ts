@@ -5,7 +5,12 @@ import { Address } from '../../src/modules/collection-points/domain/value-object
 import { Coordinates } from '../../src/modules/collection-points/domain/value-objects/coordinates.js';
 import { Material } from '../../src/modules/collection-points/domain/value-objects/material.js';
 import { DynamoCollectionPointRepository } from '../../src/modules/collection-points/infrastructure/dynamodb/dynamo-collection-point-repository.js';
-import { toItem } from '../../src/modules/collection-points/infrastructure/dynamodb/collection-point-item.js';
+import {
+  GEOHASH_PARTITION_PRECISION,
+  keys,
+  toItem,
+} from '../../src/modules/collection-points/infrastructure/dynamodb/collection-point-item.js';
+import { encodeGeohash } from '../../src/shared/domain/geo/index.js';
 import { decodeCursor } from '../../src/shared/infrastructure/dynamodb/index.js';
 import { createRecordingLogger, silentLogger } from '../support/fakes.js';
 
@@ -477,5 +482,166 @@ describe('DynamoCollectionPointRepository material pagination', () => {
       collected: 0,
       pagesRead: 5,
     });
+  });
+});
+
+describe('DynamoCollectionPointRepository nearby paging', () => {
+  const centre = Coordinates.create(-23.3103, -51.1628);
+
+  function geoPartitionOf(latitude: number, longitude: number) {
+    return keys.geoPartition(encodeGeohash(latitude, longitude, GEOHASH_PARTITION_PRECISION));
+  }
+
+  /**
+   * Routes by the partition asked for and by how many times it was asked, so the
+   * test does not depend on the order the cells happen to be queried in.
+   */
+  function pagingClient(pagesByPartition: Map<string, unknown[]>) {
+    const sent: { name: string; input: Record<string, unknown> }[] = [];
+    const served = new Map<string, number>();
+
+    const send = vi.fn(
+      (command: { constructor: { name: string }; input: Record<string, unknown> }) => {
+        sent.push({ name: command.constructor.name, input: command.input });
+
+        const values = command.input.ExpressionAttributeValues as
+          | Record<string, string>
+          | undefined;
+        const partition = values?.[':partition'] ?? '';
+        const index = served.get(partition) ?? 0;
+        served.set(partition, index + 1);
+
+        return Promise.resolve(pagesByPartition.get(partition)?.[index] ?? { Items: [] });
+      },
+    );
+
+    return { client: { send } as unknown as DynamoDBDocumentClient, sent };
+  }
+
+  function queriesFor(
+    sent: { input: Record<string, unknown> }[],
+    partition: string,
+  ): { input: Record<string, unknown> }[] {
+    return sent.filter((command) => {
+      const values = command.input.ExpressionAttributeValues as Record<string, string> | undefined;
+      return values?.[':partition'] === partition;
+    });
+  }
+
+  it('follows LastEvaluatedKey so a point on the second page still ranks', async () => {
+    const partition = geoPartitionOf(centre.latitude, centre.longitude);
+    const cursor = { GSI2PK: partition, GSI2SK: 'POINT#middling' };
+
+    // The nearest point is only reachable through the cursor: a single page
+    // would have ranked the middling one first and lost the other entirely.
+    const middling = buildPoint('middling', -23.34, -51.19);
+    const nearest = buildPoint('nearest', -23.3105, -51.163);
+
+    const { client, sent } = pagingClient(
+      new Map([
+        [
+          partition,
+          [{ Items: [toItem(middling)], LastEvaluatedKey: cursor }, { Items: [toItem(nearest)] }],
+        ],
+      ]),
+    );
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    const points = await repository.findNearby({ centre, radiusKm: 5, limit: 10 });
+
+    expect(points.map((point) => point.id)).toEqual(['nearest', 'middling']);
+
+    const cellQueries = queriesFor(sent, partition);
+    expect(cellQueries).toHaveLength(2);
+    expect(cellQueries[0]?.input.ExclusiveStartKey).toBeUndefined();
+    expect(cellQueries[1]?.input.ExclusiveStartKey).toEqual(cursor);
+  });
+
+  it('drains a cell across several pages before ranking', async () => {
+    const partition = geoPartitionOf(centre.latitude, centre.longitude);
+    const ids = ['third', 'second', 'first'];
+
+    // One point per page, planted from farthest to nearest.
+    const pages = ids.map((id, index) => ({
+      Items: [toItem(buildPoint(id, -23.3103 - (ids.length - index) * 0.005, -51.1628))],
+      ...(index < ids.length - 1
+        ? { LastEvaluatedKey: { GSI2PK: partition, GSI2SK: `POINT#${id}` } }
+        : {}),
+    }));
+
+    const { client, sent } = pagingClient(new Map([[partition, pages]]));
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    const points = await repository.findNearby({ centre, radiusKm: 5, limit: 10 });
+
+    expect(points.map((point) => point.id)).toEqual(['first', 'second', 'third']);
+    expect(queriesFor(sent, partition)).toHaveLength(3);
+  });
+
+  it('still honours the limit after reading every page', async () => {
+    const partition = geoPartitionOf(centre.latitude, centre.longitude);
+
+    const { client } = pagingClient(
+      new Map([
+        [
+          partition,
+          [
+            {
+              Items: [toItem(buildPoint('far', -23.33, -51.1628))],
+              LastEvaluatedKey: { GSI2PK: partition, GSI2SK: 'POINT#far' },
+            },
+            { Items: [toItem(buildPoint('close', -23.3113, -51.1628))] },
+          ],
+        ],
+      ]),
+    );
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    const points = await repository.findNearby({ centre, radiusKm: 5, limit: 1 });
+
+    expect(points.map((point) => point.id)).toEqual(['close']);
+  });
+
+  it('stops at the page cap on an endless cell and warns with the cell and page count', async () => {
+    const partition = geoPartitionOf(centre.latitude, centre.longitude);
+
+    // Every page promises another, so only the cap ends the loop.
+    const pages = Array.from({ length: 20 }, (_, index) => ({
+      Items: [toItem(buildPoint(`point-${index}`, -23.3105, -51.163))],
+      LastEvaluatedKey: { GSI2PK: partition, GSI2SK: `POINT#point-${index}` },
+    }));
+
+    const { client, sent } = pagingClient(new Map([[partition, pages]]));
+    const { logger, warnings } = createRecordingLogger();
+    const repository = new DynamoCollectionPointRepository(client, TABLE, logger);
+
+    const points = await repository.findNearby({ centre, radiusKm: 5, limit: 50 });
+
+    expect(queriesFor(sent, partition)).toHaveLength(10);
+    expect(points).toHaveLength(10);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.context).toMatchObject({
+      operation: 'DynamoCollectionPointRepository.findNearby',
+      cell: encodeGeohash(centre.latitude, centre.longitude, GEOHASH_PARTITION_PRECISION),
+      pagesRead: 10,
+    });
+  });
+
+  it('does not warn for a cell that ends exactly on its last page', async () => {
+    const partition = geoPartitionOf(centre.latitude, centre.longitude);
+
+    const pages = Array.from({ length: 10 }, (_, index) => ({
+      Items: [toItem(buildPoint(`point-${index}`, -23.3105, -51.163))],
+      ...(index < 9 ? { LastEvaluatedKey: { GSI2PK: partition, GSI2SK: `POINT#${index}` } } : {}),
+    }));
+
+    const { client, sent } = pagingClient(new Map([[partition, pages]]));
+    const { logger, warnings } = createRecordingLogger();
+    const repository = new DynamoCollectionPointRepository(client, TABLE, logger);
+
+    await repository.findNearby({ centre, radiusKm: 5, limit: 50 });
+
+    expect(queriesFor(sent, partition)).toHaveLength(10);
+    expect(warnings).toEqual([]);
   });
 });

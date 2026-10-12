@@ -40,6 +40,7 @@ const MAX_BATCH_GET_KEYS = 100;
 const MAX_BATCH_GET_ATTEMPTS = 5;
 const BATCH_GET_BASE_DELAY_MS = 50;
 const MAX_MATERIAL_LINK_PAGES = 5;
+const MAX_GEO_PAGES_PER_CELL = 10;
 
 type BatchGetKeys = NonNullable<
   NonNullable<NonNullable<BatchGetCommandOutput['UnprocessedKeys']>[string]>['Keys']
@@ -189,6 +190,12 @@ export class DynamoCollectionPointRepository implements CollectionPointRepositor
     };
   }
 
+  /**
+   * Every candidate in the covering cells has to be read before the results can
+   * be ranked, because the nearest point may sit on any page of any cell. A
+   * single Query returns at most 1 MB, so each cell is drained page by page
+   * rather than judged by its first page alone.
+   */
   async findNearby(query: NearbyQuery): Promise<CollectionPoint[]> {
     const cells = geohashCellsCovering(
       query.centre.latitude,
@@ -197,27 +204,51 @@ export class DynamoCollectionPointRepository implements CollectionPointRepositor
       GEOHASH_PARTITION_PRECISION,
     );
 
-    const pages = await Promise.all(
-      cells.map((cell) =>
-        this.client.send(
-          new QueryCommand({
-            TableName: this.tableName,
-            IndexName: INDEX_NAMES.geo,
-            KeyConditionExpression: 'GSI2PK = :partition',
-            ExpressionAttributeValues: { ':partition': keys.geoPartition(cell) },
-          }),
-        ),
-      ),
-    );
+    const perCell = await Promise.all(cells.map((cell) => this.readGeoCell(cell)));
 
-    const candidates = pages.flatMap((page) => (page.Items ?? []).map(toDomain));
-
-    return candidates
+    return perCell
+      .flat()
       .map((point) => ({ point, distanceKm: point.distanceKmTo(query.centre) }))
       .filter((entry) => entry.distanceKm <= query.radiusKm)
       .sort((a, b) => a.distanceKm - b.distanceKm)
       .slice(0, query.limit)
       .map((entry) => entry.point);
+  }
+
+  private async readGeoCell(cell: string): Promise<CollectionPoint[]> {
+    const points: CollectionPoint[] = [];
+    let startKey: DynamoKey | undefined;
+    let pagesRead = 0;
+
+    for (;;) {
+      const page = await this.client.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          IndexName: INDEX_NAMES.geo,
+          KeyConditionExpression: 'GSI2PK = :partition',
+          ExpressionAttributeValues: { ':partition': keys.geoPartition(cell) },
+          ExclusiveStartKey: startKey,
+        }),
+      );
+
+      for (const item of page.Items ?? []) points.push(toDomain(item));
+
+      pagesRead += 1;
+      startKey = page.LastEvaluatedKey;
+
+      if (!startKey) break;
+
+      if (pagesRead >= MAX_GEO_PAGES_PER_CELL) {
+        this.logger.warn('Nearby search stopped at the page cap with the cell unread', {
+          operation: 'DynamoCollectionPointRepository.findNearby',
+          cell,
+          pagesRead,
+        });
+        break;
+      }
+    }
+
+    return points;
   }
 
   /**

@@ -171,6 +171,34 @@ sequenceDiagram
 Cada um está atrás de um único arquivo. Trocar qualquer um deles é uma mudança
 local.
 
+### Política de uso do Nominatim
+
+A instância pública aceita **no máximo 1 requisição por segundo** e bloqueia por
+IP quem passa disso. `NominatimGeocodingService` aplica quatro camadas, nesta
+ordem:
+
+1. **Cache em memória** — 1 hora, até 200 endereços, por container Lambda. Um
+   endereço repetido não gasta requisição nem slot do limitador.
+2. **Limitador de 1 req/s** — as chamadas são serializadas numa fila dentro do
+   container, espaçadas em 1 segundo. Duas buscas simultâneas pelo mesmo
+   endereço são unificadas: a segunda encontra o cache que a primeira acabou de
+   preencher.
+3. **Uma retentativa** — só para erro de rede e status 5xx, com recuo de 250 ms.
+   4xx não é repetido: é o provedor dizendo que a requisição está errada, e
+   insistir só queima o orçamento de taxa.
+4. **Teto pelo timeout** — `GEOCODING_TIMEOUT_MS` (4 s em produção) é o orçamento
+   da operação inteira, incluindo a espera na fila. Se a vez da chamada só
+   chegaria depois do prazo, ela falha na hora em vez de enfileirar. Na prática
+   cabem ~4 geocodificações distintas por container dentro de um orçamento de
+   4 s; o excedente recebe o mesmo erro de provedor indisponível.
+
+**O limitador é por container, não global.** Com
+`public_lambda_reserved_concurrency = 20`, 20 containers quentes podem somar até
+20 req/s no provedor. O que protege de verdade contra o bloqueio é o cache mais a
+concorrência reservada; o limitador elimina a rajada de um container só. Um
+limitador global exigiria estado compartilhado (token bucket no DynamoDB) ou uma
+fila de concorrência 1 — vale quando a busca por endereço tiver volume real.
+
 ## Infraestrutura
 
 Toda a infraestrutura é declarada em Terraform e **nada foi provisionado**. Ver

@@ -64,12 +64,40 @@ exceção configurada é o próprio logger.
 | `request.unauthorized`          | warn  | 401/403 na área administrativa                      |
 | `request.failed`                | error | erro inesperado → 500, com tipo, mensagem e stack   |
 | `geocoding.request.completed`   | debug | geocodificação bem-sucedida, com duração             |
+| `geocoding.request.retrying`    | warn  | 5xx ou erro de rede; uma retentativa a caminho       |
+| `geocoding.rate_limit.exhausted`| warn  | a vez da chamada cairia depois do timeout            |
 | `geocoding.request.failed`      | warn  | rede/timeout ao geocodificar                        |
 | `geocoding.request.rejected`    | warn  | provedor respondeu com erro                         |
 | `geocoding.miss.using_client_coordinates` | warn | endereço não encontrado; usadas as do app |
 | `metrics.record.failed`         | warn  | contador falhou — a operação seguiu normalmente     |
 
 Stack traces vão para o log; a resposta HTTP nunca os contém.
+
+### Campos da geocodificação
+
+`geocoding.request.completed`, `.failed`, `.rejected` e `.rate_limit.exhausted`
+trazem três campos em **toda** chamada, que contam a história da política de uso
+descrita em [architecture.md](architecture.md#política-de-uso-do-nominatim):
+
+| Campo      | Significado                                                        |
+| ---------- | ------------------------------------------------------------------ |
+| `cacheHit` | `true` quando o endereço veio do cache de 1 hora, sem tocar no provedor |
+| `waitedMs` | quanto a chamada ficou retida pelo limitador de 1 req/s             |
+| `retried`  | `true` quando a resposta exigiu uma segunda tentativa               |
+
+Com `LOG_LEVEL = info` em produção, o `completed` (debug) não aparece: o caminho
+feliz é silencioso de propósito. O que sobe para `warn` é o que merece atenção —
+retentativa, estouro do limitador e falha. Para medir cache e espera num
+diagnóstico, suba o nível para `debug` temporariamente.
+
+Dois sinais e o que significam:
+
+- `geocoding.request.retrying` frequente → o provedor está instável. A pessoa
+  não vê erro, mas a latência da busca por endereço dobra.
+- `geocoding.rate_limit.exhausted` → mais buscas por endereços distintos do que
+  1 req/s por container comporta. Indica que o cache não está ajudando (consultas
+  muito dispersas) ou que o volume cresceu. É o gatilho para considerar um
+  limitador global.
 
 ## Log groups
 
@@ -138,6 +166,11 @@ fields errorType
 fields @timestamp, message, durationMs
 | filter message like /geocoding/
 | stats count() by message
+
+-- pressão sobre a política de uso do provedor
+fields @timestamp, message, waitedMs, retried, cacheHit
+| filter message like /geocoding/
+| stats count() by message, retried
 ```
 
 ## O que ainda não existe

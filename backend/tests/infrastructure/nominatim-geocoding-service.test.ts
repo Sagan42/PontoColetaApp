@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ExternalServiceError } from '../../src/shared/domain/errors/index.js';
-import { NominatimGeocodingService } from '../../src/modules/collection-points/infrastructure/geocoding/nominatim-geocoding-service.js';
-import { silentLogger } from '../support/fakes.js';
+import {
+  NominatimGeocodingService,
+  type GeocodingTimers,
+} from '../../src/modules/collection-points/infrastructure/geocoding/nominatim-geocoding-service.js';
+import { createRecordingLogger, silentLogger } from '../support/fakes.js';
 
 const options = {
   baseUrl: 'https://nominatim.example.org',
@@ -95,5 +98,290 @@ describe('NominatimGeocodingService', () => {
     );
 
     await expect(buildService().search('Centro')).rejects.toBeInstanceOf(ExternalServiceError);
+  });
+});
+
+const PROVIDER_UNAVAILABLE = 'Não foi possível consultar o serviço de endereços. Tente novamente.';
+
+/** Virtual clock: `wait` advances it, so budget maths is exact and tests are instant. */
+function fakeTimers() {
+  let current = 1_000_000;
+  const waits: number[] = [];
+
+  const timers: GeocodingTimers = {
+    now: () => current,
+    wait: (ms) => {
+      waits.push(ms);
+      current += ms;
+      return Promise.resolve();
+    },
+  };
+
+  return { timers, waits };
+}
+
+type Reply = { status: number; body?: unknown } | Error;
+
+function mockFetchSequence(replies: Reply[]) {
+  let index = 0;
+
+  const fetchMock = vi.fn((_input: string | URL | Request, _init?: RequestInit) => {
+    const reply = replies[Math.min(index, replies.length - 1)];
+    index += 1;
+
+    if (reply instanceof Error) return Promise.reject(reply);
+
+    return Promise.resolve({
+      ok: reply !== undefined && reply.status < 400,
+      status: reply?.status ?? 200,
+      json: () => Promise.resolve(reply?.body ?? []),
+    } as Response);
+  });
+
+  vi.stubGlobal('fetch', fetchMock);
+  return fetchMock;
+}
+
+const place = { lat: '-23.31', lon: '-51.16', display_name: 'Centro, Londrina' };
+
+describe('NominatimGeocodingService rate limiting', () => {
+  function buildWith(timers: GeocodingTimers, timeoutMs = 4000) {
+    const recorder = createRecordingLogger();
+    const service = new NominatimGeocodingService(
+      { ...options, timeoutMs },
+      recorder.logger,
+      timers,
+    );
+    return { service, recorder };
+  }
+
+  it('leaves a second between consecutive provider calls', async () => {
+    const fetchMock = mockFetchSequence([{ status: 200, body: [place] }]);
+    const { timers, waits } = fakeTimers();
+    const { service } = buildWith(timers);
+
+    await service.search('Rua A');
+    await service.search('Rua B');
+    await service.search('Rua C');
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    // The first call goes straight through; each later one waits out the interval.
+    expect(waits).toEqual([1000, 1000]);
+  });
+
+  it('serialises calls that arrive together instead of bursting', async () => {
+    const fetchMock = mockFetchSequence([{ status: 200, body: [place] }]);
+    const { timers, waits } = fakeTimers();
+    const { service } = buildWith(timers);
+
+    await Promise.all([service.search('Rua A'), service.search('Rua B'), service.search('Rua C')]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(waits).toEqual([1000, 1000]);
+  });
+
+  it('gives up instead of queueing past the configured timeout', async () => {
+    mockFetchSequence([{ status: 200, body: [place] }]);
+    const { timers } = fakeTimers();
+    const { service, recorder } = buildWith(timers, 4000);
+
+    const settled = await Promise.allSettled([
+      service.search('Rua A'),
+      service.search('Rua B'),
+      service.search('Rua C'),
+      service.search('Rua D'),
+      service.search('Rua E'),
+    ]);
+
+    // Four fit inside the 4s budget at one per second; the fifth cannot.
+    expect(settled.filter((entry) => entry.status === 'fulfilled')).toHaveLength(4);
+
+    const rejected = settled[4];
+    expect(rejected?.status).toBe('rejected');
+    if (rejected?.status === 'rejected') {
+      expect(rejected.reason).toBeInstanceOf(ExternalServiceError);
+      expect((rejected.reason as Error).message).toBe(PROVIDER_UNAVAILABLE);
+    }
+
+    expect(recorder.warnings.map((entry) => entry.message)).toContain(
+      'geocoding.rate_limit.exhausted',
+    );
+  });
+
+  it('serves a repeated query from cache without spending a rate limit slot', async () => {
+    const fetchMock = mockFetchSequence([{ status: 200, body: [place] }]);
+    const { timers, waits } = fakeTimers();
+    const { service } = buildWith(timers);
+
+    await service.search('Centro');
+    await service.search('Centro');
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(waits).toEqual([]);
+  });
+
+  it('coalesces identical queries that arrive together into one provider call', async () => {
+    const fetchMock = mockFetchSequence([{ status: 200, body: [place] }]);
+    const { timers, waits } = fakeTimers();
+    const { service } = buildWith(timers);
+
+    const [first, second] = await Promise.all([service.search('Centro'), service.search('Centro')]);
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(waits).toEqual([]);
+    expect(second).toEqual(first);
+  });
+});
+
+describe('NominatimGeocodingService retrying', () => {
+  function buildWith(timers: GeocodingTimers, timeoutMs = 4000) {
+    const recorder = createRecordingLogger();
+    const service = new NominatimGeocodingService(
+      { ...options, timeoutMs },
+      recorder.logger,
+      timers,
+    );
+    return { service, recorder };
+  }
+
+  it('retries once after a 5xx and returns the second answer', async () => {
+    const fetchMock = mockFetchSequence([{ status: 503 }, { status: 200, body: [place] }]);
+    const { timers, waits } = fakeTimers();
+    const { service, recorder } = buildWith(timers);
+
+    const results = await service.search('Centro');
+
+    expect(results).toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Short backoff, then the rest of the one-per-second interval.
+    expect(waits).toEqual([250, 750]);
+    expect(recorder.warnings.map((entry) => entry.message)).toEqual(['geocoding.request.retrying']);
+    expect(recorder.warnings[0]?.context).toMatchObject({ status: 503, backoffMs: 250 });
+  });
+
+  it('retries once after a network error', async () => {
+    const fetchMock = mockFetchSequence([new Error('ECONNRESET'), { status: 200, body: [place] }]);
+    const { timers } = fakeTimers();
+    const { service, recorder } = buildWith(timers);
+
+    await expect(service.search('Centro')).resolves.toHaveLength(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(recorder.warnings[0]?.context).toMatchObject({ errorType: 'Error' });
+  });
+
+  it('does not retry a 4xx, which would only burn the rate budget', async () => {
+    const fetchMock = mockFetchSequence([{ status: 400 }]);
+    const { timers } = fakeTimers();
+    const { service, recorder } = buildWith(timers);
+
+    await expect(service.search('Centro')).rejects.toBeInstanceOf(ExternalServiceError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(recorder.warnings.map((entry) => entry.message)).toEqual(['geocoding.request.rejected']);
+  });
+
+  it('retries at most once, then reports the failure', async () => {
+    const fetchMock = mockFetchSequence([{ status: 503 }, { status: 503 }]);
+    const { timers } = fakeTimers();
+    const { service, recorder } = buildWith(timers);
+
+    await expect(service.search('Centro')).rejects.toBeInstanceOf(ExternalServiceError);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(recorder.warnings.map((entry) => entry.message)).toEqual([
+      'geocoding.request.retrying',
+      'geocoding.request.rejected',
+    ]);
+    expect(recorder.warnings[1]?.context).toMatchObject({ retried: true });
+  });
+
+  it('skips the retry when the timeout leaves no room for a second call', async () => {
+    const fetchMock = mockFetchSequence([{ status: 503 }, { status: 200, body: [place] }]);
+    const { timers } = fakeTimers();
+    // A second call has to wait out the one-per-second interval, which does not
+    // fit in a 1s budget.
+    const { service } = buildWith(timers, 1000);
+
+    await expect(service.search('Centro')).rejects.toBeInstanceOf(ExternalServiceError);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the existing message for every failure path', async () => {
+    mockFetchSequence([{ status: 400 }]);
+    const { timers } = fakeTimers();
+    const { service } = buildWith(timers);
+
+    await expect(service.search('Centro')).rejects.toThrow(PROVIDER_UNAVAILABLE);
+  });
+});
+
+describe('NominatimGeocodingService logging', () => {
+  function buildWith(timers: GeocodingTimers, timeoutMs = 4000) {
+    const recorder = createRecordingLogger();
+    const service = new NominatimGeocodingService(
+      { ...options, timeoutMs },
+      recorder.logger,
+      timers,
+    );
+    return { service, recorder };
+  }
+
+  it('reports cache, limiter wait and retry on a straight call', async () => {
+    mockFetchSequence([{ status: 200, body: [place] }]);
+    const { timers } = fakeTimers();
+    const { service, recorder } = buildWith(timers);
+
+    await service.search('Centro');
+
+    expect(recorder.debugs).toHaveLength(1);
+    expect(recorder.debugs[0]?.message).toBe('geocoding.request.completed');
+    expect(recorder.debugs[0]?.context).toMatchObject({
+      cacheHit: false,
+      waitedMs: 0,
+      retried: false,
+      resultCount: 1,
+    });
+  });
+
+  it('reports a cache hit', async () => {
+    mockFetchSequence([{ status: 200, body: [place] }]);
+    const { timers } = fakeTimers();
+    const { service, recorder } = buildWith(timers);
+
+    await service.search('Centro');
+    await service.search('Centro');
+
+    expect(recorder.debugs[1]?.context).toMatchObject({
+      cacheHit: true,
+      waitedMs: 0,
+      retried: false,
+    });
+  });
+
+  it('reports how long the limiter held the call', async () => {
+    mockFetchSequence([{ status: 200, body: [place] }]);
+    const { timers } = fakeTimers();
+    const { service, recorder } = buildWith(timers);
+
+    await service.search('Rua A');
+    await service.search('Rua B');
+
+    expect(recorder.debugs[1]?.context).toMatchObject({
+      cacheHit: false,
+      waitedMs: 1000,
+      retried: false,
+    });
+  });
+
+  it('reports a retry on the call that needed it', async () => {
+    mockFetchSequence([{ status: 503 }, { status: 200, body: [place] }]);
+    const { timers } = fakeTimers();
+    const { service, recorder } = buildWith(timers);
+
+    await service.search('Centro');
+
+    expect(recorder.debugs[0]?.context).toMatchObject({
+      cacheHit: false,
+      waitedMs: 750,
+      retried: true,
+    });
   });
 });

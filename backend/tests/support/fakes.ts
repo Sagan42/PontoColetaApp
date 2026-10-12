@@ -63,17 +63,25 @@ export interface RecordedLog {
 
 export interface RecordingLogger {
   readonly logger: Logger;
+  readonly debugs: RecordedLog[];
+  readonly infos: RecordedLog[];
   readonly warnings: RecordedLog[];
   readonly errors: RecordedLog[];
 }
 
 export function createRecordingLogger(): RecordingLogger {
+  const debugs: RecordedLog[] = [];
+  const infos: RecordedLog[] = [];
   const warnings: RecordedLog[] = [];
   const errors: RecordedLog[] = [];
 
   const logger: Logger = {
-    debug: () => undefined,
-    info: () => undefined,
+    debug: (message, context) => {
+      debugs.push({ message, context });
+    },
+    info: (message, context) => {
+      infos.push({ message, context });
+    },
     warn: (message, context) => {
       warnings.push({ message, context });
     },
@@ -83,7 +91,7 @@ export function createRecordingLogger(): RecordingLogger {
     child: () => logger,
   };
 
-  return { logger, warnings, errors };
+  return { logger, debugs, infos, warnings, errors };
 }
 
 export class InMemoryCollectionPointRepository implements CollectionPointRepository {

@@ -82,8 +82,7 @@ function unprocessed(ids: string[]) {
 
 function batchKeys(command: { input: Record<string, unknown> } | undefined): unknown[] {
   const requestItems = command?.input.RequestItems as
-    | Record<string, { Keys: unknown[] } | undefined>
-    | undefined;
+    Record<string, { Keys: unknown[] } | undefined> | undefined;
   return requestItems?.[TABLE]?.Keys ?? [];
 }
 
@@ -505,8 +504,7 @@ describe('DynamoCollectionPointRepository nearby paging', () => {
         sent.push({ name: command.constructor.name, input: command.input });
 
         const values = command.input.ExpressionAttributeValues as
-          | Record<string, string>
-          | undefined;
+          Record<string, string> | undefined;
         const partition = values?.[':partition'] ?? '';
         const index = served.get(partition) ?? 0;
         served.set(partition, index + 1);

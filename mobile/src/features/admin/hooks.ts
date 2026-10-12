@@ -1,19 +1,25 @@
 import { useQuery } from '@tanstack/react-query';
-import { ApiError, apiRequest, type ApiEnvelope } from '../../services/apiClient';
+import { z } from 'zod';
+import { ApiError, apiEnvelope, apiRequest } from '../../services/apiClient';
 
-export interface UsageCounters {
-  app_open: number;
-  search_address: number;
-  search_material: number;
-  point_created: number;
-  point_viewed: number;
-}
+export const usageCountersSchema = z.object({
+  app_open: z.number(),
+  search_address: z.number(),
+  search_material: z.number(),
+  point_created: z.number(),
+  point_viewed: z.number(),
+});
 
-export interface UsageMetricsReport {
-  period: { from: string; to: string; days: number };
-  totals: UsageCounters & { searches: number };
-  daily: { date: string; counters: UsageCounters }[];
-}
+export const usageMetricsReportSchema = z.object({
+  period: z.object({ from: z.string(), to: z.string(), days: z.number() }),
+  totals: usageCountersSchema.extend({ searches: z.number() }),
+  daily: z.array(z.object({ date: z.string(), counters: usageCountersSchema })),
+});
+
+const usageMetricsEnvelope = apiEnvelope(usageMetricsReportSchema);
+
+export type UsageCounters = z.infer<typeof usageCountersSchema>;
+export type UsageMetricsReport = z.infer<typeof usageMetricsReportSchema>;
 
 export const METRIC_PERIODS = [7, 30, 90] as const;
 export type MetricPeriodDays = (typeof METRIC_PERIODS)[number];
@@ -29,7 +35,8 @@ export function useUsageMetrics(token: string | null, days: MetricPeriodDays) {
     queryKey: ['admin', 'metrics', days, token],
     enabled: Boolean(token),
     queryFn: ({ signal }) =>
-      apiRequest<ApiEnvelope<UsageMetricsReport>>('/v1/admin/metrics', {
+      apiRequest('/v1/admin/metrics', {
+        schema: usageMetricsEnvelope,
         query: { days },
         token: token ?? undefined,
         signal,

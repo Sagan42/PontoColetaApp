@@ -1,8 +1,20 @@
+import { z } from 'zod';
 import { config } from './config';
 
 export interface ApiEnvelope<T> {
   data: T;
   meta?: Record<string, unknown>;
+}
+
+/**
+ * Envelope every endpoint answers with. Unknown keys are dropped rather than
+ * rejected, so a newer API that adds fields keeps working on an older app.
+ */
+export function apiEnvelope<T extends z.ZodTypeAny>(data: T) {
+  return z.object({
+    data,
+    meta: z.record(z.string(), z.unknown()).optional(),
+  });
 }
 
 interface ApiErrorBody {
@@ -25,15 +37,17 @@ export class ApiError extends Error {
   }
 }
 
-export interface RequestOptions {
+export interface RequestOptions<T = unknown> {
   method?: 'GET' | 'POST';
   query?: Record<string, string | number | undefined>;
   body?: unknown;
   token?: string;
   signal?: AbortSignal;
+  /** When given, the response body is validated and `T` is inferred from it. */
+  schema?: z.ZodType<T>;
 }
 
-export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+export async function apiRequest<T>(path: string, options: RequestOptions<T> = {}): Promise<T> {
   const url = buildUrl(path, options.query);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.apiTimeoutMs);
@@ -80,7 +94,21 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
     );
   }
 
-  return payload as T;
+  if (!options.schema) return payload as T;
+
+  // A 200 is not a promise about the shape: proxies, Wi-Fi captive portals and
+  // other API versions all answer 200 with something else entirely.
+  const validated = options.schema.safeParse(payload);
+  if (!validated.success) {
+    throw new ApiError(
+      'INVALID_RESPONSE',
+      'Resposta inesperada do servidor. Tente novamente.',
+      response.status,
+      validated.error.issues,
+    );
+  }
+
+  return validated.data;
 }
 
 function buildUrl(path: string, query?: RequestOptions['query']): string {

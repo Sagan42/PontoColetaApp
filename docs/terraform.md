@@ -58,6 +58,13 @@ por recurso.
 
 Tabela única, `PAY_PER_REQUEST`, dois GSIs. Ver [dynamodb.md](dynamodb.md).
 
+Não há bloco `server_side_encryption`. A ausência **não** significa tabela sem
+criptografia: o DynamoDB cifra tudo em repouso sempre, e omitir o bloco é o
+mesmo que `enabled = false` — ambos usam a chave gerenciada pela AWS, sem custo.
+`enabled = true` trocaria para uma chave do KMS (`aws/dynamodb`), que é cobrada.
+O bloco existia com `enabled = false` e lia como se a criptografia estivesse
+desligada; foi removido porque dizia o contrário do que fazia.
+
 > O AWS provider 6.61 marca `hash_key`/`range_key` como deprecados em favor de
 > um bloco `key_schema`, mas esse bloco ainda só existe dentro de
 > `global_secondary_index`. Enquanto o provider não expuser o substituto no
@@ -106,6 +113,7 @@ senha não pertence ao state.
 | `point_in_time_recovery_enabled`    | `false`  | backups contínuos do DynamoDB                      |
 | `deletion_protection_enabled`       | `false`  | impede destruir a tabela                           |
 | `admin_mfa_configuration`           | `OPTIONAL` | política de MFA do pool                          |
+| `cors_allow_origins`                | `[]`     | CORS desligado; abrir origem só para ferramenta local |
 | `tags`                              | `{}`     | tags extras                                        |
 
 Diferenças efetivas entre ambientes:
@@ -118,7 +126,7 @@ Diferenças efetivas entre ambientes:
 | Deletion protection   | desligada  | **ligada** |
 | MFA administrativo    | `OPTIONAL` | **`ON`**   |
 | Throttling            | 10 / 20    | 50 / 100   |
-| Concorrência reservada| ilimitada  | 20 / 2     |
+| Concorrência reservada| **5 / 1**  | 20 / 2     |
 
 ## Outputs
 
@@ -172,6 +180,26 @@ terraform validate                        # valida a configuração
 ```
 
 O mesmo vale para `environments/prod` e `bootstrap/`.
+
+### No CI
+
+`.github/workflows/verify.yml` roda exatamente os dois comandos acima, em
+`push` e em pull request, num job separado do job de Node:
+
+```yaml
+terraform fmt -recursive -check          # em infrastructure/terraform
+terraform init -backend=false            # em environments/{dev,prod}
+terraform validate
+```
+
+`-backend=false` instala providers e módulos sem ler o backend, então o job
+**não precisa de credencial AWS** — o que só funciona porque a configuração não
+tem `data "aws_caller_identity"` nem `data "aws_region"`. Preservar isso é o que
+mantém a infraestrutura verificável no CI.
+
+O workflow **não** executa `plan`, `apply` nem `destroy`, e não tem nenhum passo
+de credencial. O primeiro `apply` continua sendo manual e autorizado pelo
+proprietário.
 
 ### Futuro (após conectar a conta)
 

@@ -63,10 +63,14 @@ variable "admin_jwt_audience" {
   type        = string
 }
 
+# Empty is the right default here. The mobile app is a native client: it never
+# sends an Origin header, so it needs no CORS at all. Open an origin only for a
+# local tool that genuinely needs one, adding that exact origin case by case —
+# never "*", which would let any web page in any browser call this API.
 variable "cors_allow_origins" {
-  description = "Origins allowed by CORS. The mobile app does not need CORS; this is for local tooling."
+  description = "Origins allowed by CORS. Empty disables it. The mobile app does not need CORS; add an exact origin only for a local tool that does."
   type        = list(string)
-  default     = ["*"]
+  default     = []
 }
 
 variable "throttling_rate_limit" {

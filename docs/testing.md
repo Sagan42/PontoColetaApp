@@ -9,8 +9,8 @@ Nenhum teste precisa de conta AWS, LocalStack ou DynamoDB Local.
 
 | Suíte    | Framework                            | Arquivos | Testes  | Tempo   |
 | -------- | ------------------------------------ | -------- | ------- | ------- |
-| Backend  | Vitest                               | 13       | **161** | ~1,3 s  |
-| Mobile   | Jest (`jest-expo`) + RNTL 14         | 5        | **37**  | ~5 s    |
+| Backend  | Vitest                               | 14       | **232** | ~1,5 s  |
+| Mobile   | Jest (`jest-expo`) + RNTL 14         | 9        | **77**  | ~5 s    |
 
 ```bash
 npm test                 # ambos
@@ -18,6 +18,33 @@ npm run test:backend
 npm run test:mobile
 npm --prefix backend run test:coverage
 ```
+
+## Integração contínua
+
+`npm run verify` (lint + typecheck + testes + build do backend) é o portão, e
+`.github/workflows/verify.yml` é o que o obriga em **todo push e todo pull
+request**. Antes disso, nada impedia um commit quebrado de entrar.
+
+| Job                       | O que roda                                                                 | Credencial |
+| ------------------------- | -------------------------------------------------------------------------- | ---------- |
+| `lint · typecheck · test · build` | `npm run install:all` e `npm run verify`                            | nenhuma    |
+| `terraform fmt · validate`        | `fmt -recursive -check`; `init -backend=false` + `validate` em dev e prod | nenhuma    |
+
+Decisões do workflow que valem conhecer:
+
+- **Node vem do `.nvmrc`** (`node-version-file`), então CI e máquina local não
+  podem divergir de versão.
+- **Cache de npm apontando para os dois lock files.** Não existe
+  `package-lock.json` na raiz: os projetos instalam separados, então a chave do
+  cache precisa vir de `backend/` e de `mobile/`.
+- **Os dois jobs são independentes** e rodam em paralelo: um erro de formatação
+  de Terraform não esconde uma falha de teste, nem o contrário.
+- **Nenhum passo recebe credencial AWS**, e nenhum roda `plan`, `apply` ou
+  `destroy`. O Terraform para em `fmt` e `validate` — ver
+  [terraform.md](terraform.md#no-ci).
+
+O que o CI **não** cobre, e continua manual: `terraform plan`, qualquer deploy,
+e o build do app móvel pelo EAS.
 
 ## Escolha de frameworks
 

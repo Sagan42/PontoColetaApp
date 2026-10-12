@@ -16,4 +16,9 @@ module "stack" {
   api_throttling_burst_limit = 20
 
   admin_mfa_configuration = "OPTIONAL"
+
+  # Lower than prod on purpose. dev is for one person at a time, and a runaway
+  # loop here should hit a wall long before it shows up on the bill.
+  public_lambda_reserved_concurrency = 5
+  admin_lambda_reserved_concurrency  = 1
 }

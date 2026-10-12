@@ -54,10 +54,6 @@ resource "aws_dynamodb_table" "main" {
     enabled = var.point_in_time_recovery_enabled
   }
 
-  server_side_encryption {
-    enabled = false
-  }
-
   deletion_protection_enabled = var.deletion_protection_enabled
 
   tags = var.tags

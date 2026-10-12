@@ -1,0 +1,72 @@
+name: verify
+
+on:
+  push:
+  pull_request:
+
+# Nothing here touches the AWS account: no credentials are configured, and the
+# Terraform job stops at fmt/validate. plan, apply and destroy stay manual, as
+# docs/terraform.md requires.
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: lint · typecheck · test · build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Single source of truth for the version, shared with local setup.
+          node-version-file: .nvmrc
+          cache: npm
+          # There is no lock file at the root: the two projects install
+          # separately, so the cache key has to come from both.
+          cache-dependency-path: |
+            backend/package-lock.json
+            mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm run install:all
+
+      - name: Verify
+        run: npm run verify
+
+  terraform:
+    name: terraform fmt · validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          # The wrapper swallows exit codes and reformats output, which hides
+          # which file fmt is complaining about.
+          terraform_wrapper: false
+
+      - name: Check formatting
+        run: terraform fmt -recursive -check
+        working-directory: infrastructure/terraform
+
+      # -backend=false installs providers and modules without reading the
+      # backend, so validate needs no state and no credentials.
+      - name: Validate dev
+        run: |
+          terraform init -backend=false
+          terraform validate
+        working-directory: infrastructure/terraform/environments/dev
+
+      - name: Validate prod
+        run: |
+          terraform init -backend=false
+          terraform validate
+        working-directory: infrastructure/terraform/environments/prod

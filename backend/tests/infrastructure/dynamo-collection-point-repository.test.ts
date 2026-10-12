@@ -6,6 +6,7 @@ import { Coordinates } from '../../src/modules/collection-points/domain/value-ob
 import { Material } from '../../src/modules/collection-points/domain/value-objects/material.js';
 import { DynamoCollectionPointRepository } from '../../src/modules/collection-points/infrastructure/dynamodb/dynamo-collection-point-repository.js';
 import { toItem } from '../../src/modules/collection-points/infrastructure/dynamodb/collection-point-item.js';
+import { decodeCursor } from '../../src/shared/infrastructure/dynamodb/index.js';
 import { createRecordingLogger, silentLogger } from '../support/fakes.js';
 
 const TABLE = 'pontocoleta-test';
@@ -38,6 +39,51 @@ function stubClient(responses: unknown[] = []) {
   );
 
   return { client: { send } as unknown as DynamoDBDocumentClient, sent, send };
+}
+
+function buildHiddenPoint(id: string): CollectionPoint {
+  const point = buildPoint(id);
+  point.hide(now);
+  return point;
+}
+
+function recordingWait() {
+  const delays: number[] = [];
+
+  return {
+    delays,
+    wait: (ms: number) => {
+      delays.push(ms);
+      return Promise.resolve();
+    },
+  };
+}
+
+function linkKey(id: string) {
+  return { PK: 'CITY#LONDRINA', SK: `MATERIAL#pilhas#POINT#${id}` };
+}
+
+function materialLinks(ids: string[]) {
+  return { Items: ids.map(linkKey) };
+}
+
+function pointKey(id: string) {
+  return { PK: 'CITY#LONDRINA', SK: `POINT#${id}` };
+}
+
+function unprocessed(ids: string[]) {
+  return { [TABLE]: { Keys: ids.map(pointKey) } };
+}
+
+function batchKeys(command: { input: Record<string, unknown> } | undefined): unknown[] {
+  const requestItems = command?.input.RequestItems as
+    | Record<string, { Keys: unknown[] } | undefined>
+    | undefined;
+  return requestItems?.[TABLE]?.Keys ?? [];
+}
+
+function queries(sent: { name: string; input: Record<string, unknown> }[]) {
+  return sent.filter((command) => command.name === 'QueryCommand');
 }
 
 describe('DynamoCollectionPointRepository', () => {
@@ -155,37 +201,6 @@ describe('DynamoCollectionPointRepository', () => {
 });
 
 describe('DynamoCollectionPointRepository batch get', () => {
-  function recordingWait() {
-    const delays: number[] = [];
-
-    return {
-      delays,
-      wait: (ms: number) => {
-        delays.push(ms);
-        return Promise.resolve();
-      },
-    };
-  }
-
-  function materialLinks(ids: string[]) {
-    return { Items: ids.map((id) => ({ SK: `MATERIAL#pilhas#POINT#${id}` })) };
-  }
-
-  function pointKey(id: string) {
-    return { PK: 'CITY#LONDRINA', SK: `POINT#${id}` };
-  }
-
-  function unprocessed(ids: string[]) {
-    return { [TABLE]: { Keys: ids.map(pointKey) } };
-  }
-
-  function batchKeys(command: { input: Record<string, unknown> } | undefined): unknown[] {
-    const requestItems = command?.input.RequestItems as
-      | Record<string, { Keys: unknown[] } | undefined>
-      | undefined;
-    return requestItems?.[TABLE]?.Keys ?? [];
-  }
-
   it('resends the keys DynamoDB left unprocessed on the first call', async () => {
     const { client, sent } = stubClient([
       materialLinks(['point-1', 'point-2']),
@@ -287,5 +302,180 @@ describe('DynamoCollectionPointRepository batch get', () => {
     expect(batchKeys(sent[3])).toEqual([pointKey(lastId)]);
     expect(delays).toEqual([50]);
     expect(warnings).toEqual([]);
+  });
+});
+
+describe('DynamoCollectionPointRepository material pagination', () => {
+  function cursorOf(page: { nextCursor: string | null }) {
+    return decodeCursor(page.nextCursor ?? undefined);
+  }
+
+  it('fills the page with as many published points as the limit asks for', async () => {
+    const { client, sent } = stubClient([
+      { ...materialLinks(['point-1', 'point-2']), LastEvaluatedKey: linkKey('point-2') },
+      { Responses: { [TABLE]: [toItem(buildPoint('point-1')), toItem(buildPoint('point-2'))] } },
+    ]);
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    const page = await repository.findByMaterialSlug('pilhas', { limit: 2 });
+
+    expect(page.items.map((point) => point.id)).toEqual(['point-1', 'point-2']);
+    expect(cursorOf(page)).toEqual(linkKey('point-2'));
+    expect(queries(sent)).toHaveLength(1);
+  });
+
+  it('keeps reading links so hidden points in the middle do not shrink the page', async () => {
+    const { client, sent } = stubClient([
+      { ...materialLinks(['point-1', 'point-2', 'point-3']), LastEvaluatedKey: linkKey('point-3') },
+      {
+        Responses: {
+          [TABLE]: [
+            toItem(buildPoint('point-1')),
+            toItem(buildHiddenPoint('point-2')),
+            toItem(buildPoint('point-3')),
+          ],
+        },
+      },
+      materialLinks(['point-4', 'point-5']),
+      {
+        Responses: {
+          [TABLE]: [toItem(buildHiddenPoint('point-4')), toItem(buildPoint('point-5'))],
+        },
+      },
+    ]);
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    const page = await repository.findByMaterialSlug('pilhas', { limit: 3 });
+
+    expect(page.items.map((point) => point.id)).toEqual(['point-1', 'point-3', 'point-5']);
+    expect(queries(sent)).toHaveLength(2);
+    expect(queries(sent)[1]?.input.ExclusiveStartKey).toEqual(linkKey('point-3'));
+  });
+
+  it('ends with a null cursor once the material partition runs out', async () => {
+    const { client } = stubClient([
+      materialLinks(['point-1', 'point-2']),
+      { Responses: { [TABLE]: [toItem(buildPoint('point-1')), toItem(buildPoint('point-2'))] } },
+    ]);
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    const page = await repository.findByMaterialSlug('pilhas', { limit: 5 });
+
+    expect(page.items.map((point) => point.id)).toEqual(['point-1', 'point-2']);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('reports a null cursor when the limit is filled by the last link of the partition', async () => {
+    const { client } = stubClient([
+      materialLinks(['point-1', 'point-2']),
+      { Responses: { [TABLE]: [toItem(buildPoint('point-1')), toItem(buildPoint('point-2'))] } },
+    ]);
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    const page = await repository.findByMaterialSlug('pilhas', { limit: 2 });
+
+    expect(page.items).toHaveLength(2);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('returns a short last page when the remaining links point at hidden points', async () => {
+    const { client } = stubClient([
+      materialLinks(['point-1', 'point-2', 'point-3']),
+      {
+        Responses: {
+          [TABLE]: [
+            toItem(buildPoint('point-1')),
+            toItem(buildHiddenPoint('point-2')),
+            toItem(buildHiddenPoint('point-3')),
+          ],
+        },
+      },
+    ]);
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    const page = await repository.findByMaterialSlug('pilhas', { limit: 3 });
+
+    expect(page.items.map((point) => point.id)).toEqual(['point-1']);
+    expect(page.nextCursor).toBeNull();
+  });
+
+  it('resumes the next page from the link it stopped on, without repeating or skipping', async () => {
+    const published = ['point-1', 'point-3', 'point-4', 'point-5', 'point-6'];
+    const items = new Map([
+      ...published.map((id) => [id, toItem(buildPoint(id))] as const),
+      ['point-2', toItem(buildHiddenPoint('point-2'))] as const,
+    ]);
+    const responseFor = (ids: string[]) => ({
+      Responses: { [TABLE]: ids.map((id) => items.get(id)) },
+    });
+
+    // Page one stops part way through its second batch of links: it needed only
+    // one more point, but DynamoDB handed it three.
+    const first = stubClient([
+      { ...materialLinks(['point-1', 'point-2', 'point-3']), LastEvaluatedKey: linkKey('point-3') },
+      responseFor(['point-1', 'point-2', 'point-3']),
+      { ...materialLinks(['point-4', 'point-5', 'point-6']), LastEvaluatedKey: linkKey('point-6') },
+      responseFor(['point-4', 'point-5', 'point-6']),
+    ]);
+    const repository = new DynamoCollectionPointRepository(first.client, TABLE, silentLogger);
+
+    const pageOne = await repository.findByMaterialSlug('pilhas', { limit: 3 });
+
+    expect(pageOne.items.map((point) => point.id)).toEqual(['point-1', 'point-3', 'point-4']);
+    // The cursor is the link consumed last, not the end of the page that was read.
+    expect(cursorOf(pageOne)).toEqual(linkKey('point-4'));
+
+    const second = stubClient([
+      materialLinks(['point-5', 'point-6']),
+      responseFor(['point-5', 'point-6']),
+    ]);
+    const continued = new DynamoCollectionPointRepository(second.client, TABLE, silentLogger);
+
+    const pageTwo = await continued.findByMaterialSlug('pilhas', {
+      limit: 3,
+      cursor: pageOne.nextCursor ?? undefined,
+    });
+
+    expect(queries(second.sent)[0]?.input.ExclusiveStartKey).toEqual(linkKey('point-4'));
+    expect(pageTwo.items.map((point) => point.id)).toEqual(['point-5', 'point-6']);
+    expect(pageTwo.nextCursor).toBeNull();
+
+    const seen = [...pageOne.items, ...pageTwo.items].map((point) => point.id);
+    expect(seen).toEqual(published);
+    expect(new Set(seen).size).toBe(seen.length);
+  });
+
+  it('gives up at the page cap on a partition of hidden points and warns', async () => {
+    const hiddenPage = (first: string, second: string) => [
+      { ...materialLinks([first, second]), LastEvaluatedKey: linkKey(second) },
+      {
+        Responses: {
+          [TABLE]: [toItem(buildHiddenPoint(first)), toItem(buildHiddenPoint(second))],
+        },
+      },
+    ];
+
+    const { client, sent } = stubClient(
+      Array.from({ length: 6 }, (_, page) =>
+        hiddenPage('point-' + String(page * 2 + 1), 'point-' + String(page * 2 + 2)),
+      ).flat(),
+    );
+    const { logger, warnings } = createRecordingLogger();
+    const repository = new DynamoCollectionPointRepository(client, TABLE, logger);
+
+    const page = await repository.findByMaterialSlug('pilhas', { limit: 2 });
+
+    expect(page.items).toEqual([]);
+    expect(queries(sent)).toHaveLength(5);
+    // The cursor still moves forward, so calling again makes progress.
+    expect(cursorOf(page)).toEqual(linkKey('point-10'));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.context).toMatchObject({
+      operation: 'DynamoCollectionPointRepository.findByMaterialSlug',
+      materialSlug: 'pilhas',
+      limit: 2,
+      collected: 0,
+      pagesRead: 5,
+    });
   });
 });

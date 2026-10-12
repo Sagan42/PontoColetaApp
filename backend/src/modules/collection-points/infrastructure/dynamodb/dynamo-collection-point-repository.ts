@@ -8,7 +8,11 @@ import {
 } from '@aws-sdk/lib-dynamodb';
 import type { Logger } from '../../../../shared/application/ports/index.js';
 import { geohashCellsCovering } from '../../../../shared/domain/geo/index.js';
-import { decodeCursor, encodeCursor } from '../../../../shared/infrastructure/dynamodb/index.js';
+import {
+  decodeCursor,
+  encodeCursor,
+  type DynamoKey,
+} from '../../../../shared/infrastructure/dynamodb/index.js';
 import type { CollectionPoint } from '../../domain/collection-point.js';
 import type { CollectionPointStatus } from '../../domain/collection-point-status.js';
 import { CollectionPointStatus as Status } from '../../domain/collection-point-status.js';
@@ -35,6 +39,7 @@ export const INDEX_NAMES = {
 const MAX_BATCH_GET_KEYS = 100;
 const MAX_BATCH_GET_ATTEMPTS = 5;
 const BATCH_GET_BASE_DELAY_MS = 50;
+const MAX_MATERIAL_LINK_PAGES = 5;
 
 type BatchGetKeys = NonNullable<
   NonNullable<NonNullable<BatchGetCommandOutput['UnprocessedKeys']>[string]>['Keys']
@@ -105,32 +110,82 @@ export class DynamoCollectionPointRepository implements CollectionPointRepositor
     };
   }
 
+  /**
+   * The material links are an index, not the answer: a link can point at a
+   * hidden point, so a page of links yields an unknown number of visible
+   * points. Pages of links are therefore read until `limit` published points
+   * are gathered, and the cursor returned is the link actually stopped on, not
+   * the end of the last page read.
+   */
   async findByMaterialSlug(
     materialSlug: string,
     request: PageRequest,
   ): Promise<Page<CollectionPoint>> {
-    const links = await this.client.send(
-      new QueryCommand({
-        TableName: this.tableName,
-        KeyConditionExpression: 'PK = :partition AND begins_with(SK, :prefix)',
-        ExpressionAttributeValues: {
-          ':partition': keys.cityPartition(),
-          ':prefix': keys.materialLinkPrefix(materialSlug),
-        },
-        Limit: request.limit,
-        ExclusiveStartKey: decodeCursor(request.cursor),
-      }),
-    );
+    const points: CollectionPoint[] = [];
+    let startKey = decodeCursor(request.cursor);
+    let lastConsumed: DynamoKey | undefined;
+    let exhausted = false;
+    let pagesRead = 0;
 
-    const ids = (links.Items ?? [])
-      .map((item) => pointIdFromMaterialLink(String(item.SK)))
-      .filter((id) => id.length > 0);
+    while (points.length < request.limit) {
+      if (pagesRead >= MAX_MATERIAL_LINK_PAGES) {
+        this.logger.warn('Material search hit the link page cap before filling the limit', {
+          operation: 'DynamoCollectionPointRepository.findByMaterialSlug',
+          materialSlug,
+          limit: request.limit,
+          collected: points.length,
+          pagesRead,
+        });
+        break;
+      }
 
-    const points = await this.batchGetPoints(ids);
+      pagesRead += 1;
+
+      const links = await this.client.send(
+        new QueryCommand({
+          TableName: this.tableName,
+          KeyConditionExpression: 'PK = :partition AND begins_with(SK, :prefix)',
+          ExpressionAttributeValues: {
+            ':partition': keys.cityPartition(),
+            ':prefix': keys.materialLinkPrefix(materialSlug),
+          },
+          Limit: request.limit,
+          ExclusiveStartKey: startKey,
+        }),
+      );
+
+      const items = links.Items ?? [];
+      const byId = await this.batchGetPoints(
+        items.map((item) => pointIdFromMaterialLink(String(item.SK))),
+      );
+
+      let leftovers = false;
+
+      for (const item of items) {
+        if (points.length >= request.limit) {
+          leftovers = true;
+          break;
+        }
+
+        lastConsumed = { PK: item.PK, SK: item.SK };
+
+        const point = byId.get(pointIdFromMaterialLink(String(item.SK)));
+        if (point?.isPubliclyVisible) points.push(point);
+      }
+
+      startKey = links.LastEvaluatedKey;
+
+      // Nothing left in this page and none promised beyond it: the partition is
+      // over, so the caller gets a null cursor instead of one more empty page.
+      if (!leftovers && !startKey) {
+        exhausted = true;
+        break;
+      }
+    }
 
     return {
-      items: points.filter((point) => point.isPubliclyVisible),
-      nextCursor: encodeCursor(links.LastEvaluatedKey),
+      items: points,
+      nextCursor: exhausted ? null : encodeCursor(lastConsumed),
     };
   }
 
@@ -165,11 +220,15 @@ export class DynamoCollectionPointRepository implements CollectionPointRepositor
       .map((entry) => entry.point);
   }
 
-  private async batchGetPoints(ids: string[]): Promise<CollectionPoint[]> {
-    const uniqueIds = [...new Set(ids)];
-    if (uniqueIds.length === 0) return [];
-
+  /**
+   * Reads the points behind a set of ids, keyed by id so the caller can resolve
+   * each index entry on its own. The ids are deduplicated only to build the
+   * request, because BatchGetItem rejects a batch that repeats a key.
+   */
+  private async batchGetPoints(ids: string[]): Promise<Map<string, CollectionPoint>> {
     const byId = new Map<string, CollectionPoint>();
+    const uniqueIds = [...new Set(ids.filter((id) => id.length > 0))];
+    if (uniqueIds.length === 0) return byId;
 
     // A BatchGet takes at most 100 keys, so the excess goes in further batches
     // rather than being dropped.
@@ -177,9 +236,7 @@ export class DynamoCollectionPointRepository implements CollectionPointRepositor
       await this.collectBatch(uniqueIds.slice(start, start + MAX_BATCH_GET_KEYS), byId);
     }
 
-    return uniqueIds
-      .map((id) => byId.get(id))
-      .filter((point): point is CollectionPoint => point !== undefined);
+    return byId;
   }
 
   /**

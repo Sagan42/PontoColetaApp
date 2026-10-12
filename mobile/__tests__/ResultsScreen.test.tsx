@@ -87,6 +87,9 @@ describe('Results', () => {
 
     await fireEvent.press(view.getByTestId('view-mode-map'));
     await waitFor(() => expect(view.queryByText('1 ponto encontrado')).toBeNull());
+    // The map itself, not the "unavailable" fallback: the lazy require resolved.
+    expect(view.getByLabelText('Mapa com 1 ponto(s) de coleta')).toBeVisible();
+    expect(view.queryByText('Mapa indisponível')).toBeNull();
 
     await fireEvent.press(view.getByTestId('view-mode-list'));
     expect(await view.findByText('1 ponto encontrado')).toBeVisible();

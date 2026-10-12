@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE, type Region } from 'react-native-maps';
+import type { Region } from 'react-native-maps';
 import { Card, EmptyState, Text, colors, radius, spacing } from '../../../design-system';
 import { config } from '../../../services/config';
 import { formatDistance } from '../../../utils/format';
@@ -14,57 +14,91 @@ export interface CollectionPointsMapProps {
   onOpenDetails: (point: CollectionPoint) => void;
 }
 
-export function CollectionPointsMap({
+type MapsModule = typeof import('react-native-maps');
+
+function loadMapsModule(): MapsModule | null {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require('react-native-maps') as MapsModule;
+  } catch {
+    return null;
+  }
+}
+
+export function CollectionPointsMap(props: CollectionPointsMapProps) {
+  // Builds without the native module exist (Expo Go, for one). A static import
+  // would blow up while the module loads, long before any boundary could help,
+  // taking the whole results screen with it.
+  const maps = loadMapsModule();
+  if (!maps) return <MapUnavailable />;
+
+  return (
+    <MapFallbackBoundary>
+      <MapCanvas maps={maps} {...props} />
+    </MapFallbackBoundary>
+  );
+}
+
+function MapCanvas({
+  maps,
   points,
   origin,
   selectedId,
   onSelect,
   onOpenDetails,
-}: CollectionPointsMapProps) {
+}: CollectionPointsMapProps & { maps: MapsModule }) {
+  const { default: MapView, Marker, PROVIDER_GOOGLE } = maps;
   const selected = points.find((point) => point.id === selectedId) ?? null;
 
   return (
-    <MapFallbackBoundary>
-      <View style={styles.container}>
-        <MapView
-          style={styles.map}
-          provider={PROVIDER_GOOGLE}
-          initialRegion={buildRegion(points, origin)}
-          showsMyLocationButton={false}
-          toolbarEnabled={false}
-          accessibilityLabel={`Mapa com ${points.length} ponto(s) de coleta`}
-        >
-          {points.map((point) => (
-            <Marker
-              key={point.id}
-              coordinate={point.location}
-              title={point.name}
-              description={point.address.formatted}
-              pinColor={point.id === selectedId ? colors.primaryDark : colors.primary}
-              onPress={() => onSelect(point)}
-            />
-          ))}
-        </MapView>
+    <View style={styles.container}>
+      <MapView
+        style={styles.map}
+        provider={PROVIDER_GOOGLE}
+        initialRegion={buildRegion(points, origin)}
+        showsMyLocationButton={false}
+        toolbarEnabled={false}
+        accessibilityLabel={`Mapa com ${points.length} ponto(s) de coleta`}
+      >
+        {points.map((point) => (
+          <Marker
+            key={point.id}
+            coordinate={point.location}
+            title={point.name}
+            description={point.address.formatted}
+            pinColor={point.id === selectedId ? colors.primaryDark : colors.primary}
+            onPress={() => onSelect(point)}
+          />
+        ))}
+      </MapView>
 
-        {selected ? (
-          <View style={styles.summary}>
-            <Card
-              onPress={() => onOpenDetails(selected)}
-              accessibilityLabel={`${selected.name}. ${selected.address.formatted}.`}
-              accessibilityHint="Abre os detalhes do ponto de coleta"
-            >
-              <Text variant="subtitle">{selected.name}</Text>
-              <Text variant="caption" color="textSecondary">
-                {selected.address.formatted}
-              </Text>
-              <Text variant="caption" color="primaryDark">
-                {formatDistance(selected.distanceKm) ?? 'Toque para ver os detalhes'}
-              </Text>
-            </Card>
-          </View>
-        ) : null}
-      </View>
-    </MapFallbackBoundary>
+      {selected ? (
+        <View style={styles.summary}>
+          <Card
+            onPress={() => onOpenDetails(selected)}
+            accessibilityLabel={`${selected.name}. ${selected.address.formatted}.`}
+            accessibilityHint="Abre os detalhes do ponto de coleta"
+          >
+            <Text variant="subtitle">{selected.name}</Text>
+            <Text variant="caption" color="textSecondary">
+              {selected.address.formatted}
+            </Text>
+            <Text variant="caption" color="primaryDark">
+              {formatDistance(selected.distanceKm) ?? 'Toque para ver os detalhes'}
+            </Text>
+          </Card>
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function MapUnavailable() {
+  return (
+    <EmptyState
+      title="Mapa indisponível"
+      description="Não foi possível carregar o mapa neste dispositivo. Use a visualização em lista."
+    />
   );
 }
 
@@ -106,12 +140,7 @@ class MapFallbackBoundary extends Component<{ children: ReactNode }, { failed: b
 
   override render() {
     if (this.state.failed) {
-      return (
-        <EmptyState
-          title="Mapa indisponível"
-          description="Não foi possível carregar o mapa neste dispositivo. Use a visualização em lista."
-        />
-      );
+      return <MapUnavailable />;
     }
 
     return this.props.children;

@@ -2,6 +2,7 @@ import { config } from '../../services/config';
 
 export interface AdminSession {
   idToken: string;
+  refreshToken: string | null;
   expiresAt: number;
 }
 
@@ -13,11 +14,17 @@ export class AdminAuthError extends Error {
 }
 
 interface InitiateAuthResponse {
-  AuthenticationResult?: { IdToken?: string; ExpiresIn?: number };
+  AuthenticationResult?: { IdToken?: string; RefreshToken?: string; ExpiresIn?: number };
   ChallengeName?: string;
 }
 
-export async function signInAdmin(email: string, password: string): Promise<AdminSession> {
+type AuthFlow = 'USER_PASSWORD_AUTH' | 'REFRESH_TOKEN_AUTH';
+
+async function initiateAuth(
+  authFlow: AuthFlow,
+  authParameters: Record<string, string>,
+  rejectedMessage: string,
+): Promise<InitiateAuthResponse> {
   if (config.admin.clientId.length === 0) {
     throw new AdminAuthError(
       'Acesso administrativo não configurado nesta build. Defina EXPO_PUBLIC_COGNITO_CLIENT_ID.',
@@ -33,9 +40,9 @@ export async function signInAdmin(email: string, password: string): Promise<Admi
         'x-amz-target': 'AWSCognitoIdentityProviderService.InitiateAuth',
       },
       body: JSON.stringify({
-        AuthFlow: 'USER_PASSWORD_AUTH',
+        AuthFlow: authFlow,
         ClientId: config.admin.clientId,
-        AuthParameters: { USERNAME: email, PASSWORD: password },
+        AuthParameters: authParameters,
       }),
     });
   } catch {
@@ -43,10 +50,34 @@ export async function signInAdmin(email: string, password: string): Promise<Admi
   }
 
   if (!response.ok) {
-    throw new AdminAuthError('E-mail ou senha inválidos.');
+    throw new AdminAuthError(rejectedMessage);
   }
 
-  const payload = (await response.json()) as InitiateAuthResponse;
+  return (await response.json()) as InitiateAuthResponse;
+}
+
+function toSession(payload: InitiateAuthResponse, currentRefreshToken: string | null): AdminSession {
+  const idToken = payload.AuthenticationResult?.IdToken;
+  if (!idToken) {
+    throw new AdminAuthError('Resposta de autenticação inválida.');
+  }
+
+  const expiresInSeconds = payload.AuthenticationResult?.ExpiresIn ?? 3600;
+
+  return {
+    idToken,
+    // REFRESH_TOKEN_AUTH does not return a new refresh token; keep the one we hold.
+    refreshToken: payload.AuthenticationResult?.RefreshToken ?? currentRefreshToken,
+    expiresAt: Date.now() + expiresInSeconds * 1000,
+  };
+}
+
+export async function signInAdmin(email: string, password: string): Promise<AdminSession> {
+  const payload = await initiateAuth(
+    'USER_PASSWORD_AUTH',
+    { USERNAME: email, PASSWORD: password },
+    'E-mail ou senha inválidos.',
+  );
 
   if (payload.ChallengeName) {
     throw new AdminAuthError(
@@ -54,13 +85,21 @@ export async function signInAdmin(email: string, password: string): Promise<Admi
     );
   }
 
-  const idToken = payload.AuthenticationResult?.IdToken;
-  if (!idToken) {
-    throw new AdminAuthError('Resposta de autenticação inválida.');
+  return toSession(payload, null);
+}
+
+export async function refreshAdminSession(session: AdminSession): Promise<AdminSession> {
+  if (!session.refreshToken) {
+    throw new AdminAuthError('Esta sessão não pode ser renovada.');
   }
 
-  const expiresInSeconds = payload.AuthenticationResult?.ExpiresIn ?? 3600;
-  return { idToken, expiresAt: Date.now() + expiresInSeconds * 1000 };
+  const payload = await initiateAuth(
+    'REFRESH_TOKEN_AUTH',
+    { REFRESH_TOKEN: session.refreshToken },
+    'Não foi possível renovar a sessão.',
+  );
+
+  return toSession(payload, session.refreshToken);
 }
 
 export function isSessionValid(session: AdminSession | null): session is AdminSession {

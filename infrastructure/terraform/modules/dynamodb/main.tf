@@ -41,6 +41,11 @@ resource "aws_dynamodb_table" "main" {
     hash_key        = "GSI1PK"
     range_key       = "GSI1SK"
     projection_type = "ALL"
+
+    on_demand_throughput {
+      max_read_request_units  = var.index_max_read_request_units
+      max_write_request_units = var.index_max_write_request_units
+    }
   }
 
   global_secondary_index {
@@ -48,6 +53,17 @@ resource "aws_dynamodb_table" "main" {
     hash_key        = "GSI2PK"
     range_key       = "GSI2SK"
     projection_type = "ALL"
+
+    on_demand_throughput {
+      max_read_request_units  = var.index_max_read_request_units
+      max_write_request_units = var.index_max_write_request_units
+    }
+  }
+
+  # A ceiling, not a reservation: on-demand still costs only what it serves.
+  on_demand_throughput {
+    max_read_request_units  = var.max_read_request_units
+    max_write_request_units = var.max_write_request_units
   }
 
   point_in_time_recovery {

@@ -26,7 +26,15 @@ module "dynamodb" {
   table_name                     = local.name_prefix
   point_in_time_recovery_enabled = var.point_in_time_recovery_enabled
   deletion_protection_enabled    = var.deletion_protection_enabled
-  tags                           = local.tags
+
+  # The indexes carry the same ceiling as the table: a nearby search reads
+  # GSI2-geo nine times, so the index is where read amplification lands.
+  max_read_request_units        = var.table_max_read_request_units
+  max_write_request_units       = var.table_max_write_request_units
+  index_max_read_request_units  = var.table_max_read_request_units
+  index_max_write_request_units = var.table_max_write_request_units
+
+  tags = local.tags
 }
 
 module "admin_auth" {
@@ -104,6 +112,26 @@ module "http_api" {
   throttling_rate_limit  = var.api_throttling_rate_limit
   throttling_burst_limit = var.api_throttling_burst_limit
   log_retention_days     = var.log_retention_days
+
+  tags = local.tags
+}
+
+# Every ceiling above is a limit; this is what tells someone it was reached.
+module "cost_guardrails" {
+  source = "../cost-guardrails"
+
+  name_prefix        = local.name_prefix
+  monthly_budget_usd = var.monthly_budget_usd
+  notification_email = var.cost_alert_email
+
+  api_id                    = module.http_api.api_id
+  api_throttling_rate_limit = var.api_throttling_rate_limit
+
+  public_lambda_function_name        = module.public_lambda.function_name
+  public_lambda_reserved_concurrency = var.public_lambda_reserved_concurrency
+
+  table_name                   = module.dynamodb.table_name
+  table_max_read_request_units = var.table_max_read_request_units
 
   tags = local.tags
 }

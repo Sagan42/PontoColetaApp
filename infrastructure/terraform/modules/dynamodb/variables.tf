@@ -15,6 +15,33 @@ variable "deletion_protection_enabled" {
   default     = false
 }
 
+# On-demand scales without a ceiling by default, which is exactly what makes an
+# abusive read loop expensive. These caps turn that into throttling instead of
+# a bill. Sized from the API throttle: see docs/terraform.md.
+variable "max_read_request_units" {
+  description = "Read units per second the table may scale to. Beyond it, DynamoDB throttles."
+  type        = number
+  default     = 500
+}
+
+variable "max_write_request_units" {
+  description = "Write units per second the table may scale to."
+  type        = number
+  default     = 20
+}
+
+variable "index_max_read_request_units" {
+  description = "Read units per second each global secondary index may scale to."
+  type        = number
+  default     = 500
+}
+
+variable "index_max_write_request_units" {
+  description = "Write units per second each global secondary index may scale to."
+  type        = number
+  default     = 20
+}
+
 variable "tags" {
   description = "Tags applied to the table."
   type        = map(string)

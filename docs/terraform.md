@@ -21,7 +21,8 @@ infrastructure/terraform/
     ├── dynamodb/         tabela + GSI1 (status) + GSI2 (geohash, esparso)
     ├── lambda/           função + role + policy mínima + log group
     ├── http-api/         API HTTP + estágio + rotas + integrações + authorizer
-    └── admin-auth/       Cognito user pool + app client
+    ├── admin-auth/       Cognito user pool + app client
+    └── cost-guardrails/  orçamento, tópico SNS e alarmes de abuso
 ```
 
 Cada ambiente é uma raiz independente, com state próprio
@@ -90,6 +91,71 @@ User pool sem cadastro público, política de senha forte, MFA configurável, ap
 client público sem segredo. **O usuário administrador não é criado aqui** —
 senha não pertence ao state.
 
+### `cost-guardrails`
+
+Orçamento mensal da AWS, um tópico SNS e três alarmes do CloudWatch. Os limiares
+não são números soltos: cada um deriva do teto que o ambiente declara. Ver
+[ADR-008](decisions/ADR-008-protecao-contra-abuso.md) e
+[observability.md](observability.md#alarmes).
+
+## Dimensionamento dos tetos
+
+A API pública não exige conta nem chave: qualquer pessoa com a URL pode chamá-la,
+e todo custo cai na conta do projeto. Os tetos abaixo existem para que o pior
+caso seja estimável.
+
+**A conta é sempre a mesma:** requisições por segundo × **2.592.000** segundos no
+mês (30 dias).
+
+| Teto                  | req/mês      | API Gateway¹ | Lambda²    |
+| --------------------- | ------------ | ------------ | ---------- |
+| 50 rps (antes, prod)  | 129.600.000  | ~US$ 130     | ~US$ 240   |
+| **10 rps (prod)**     | 25.920.000   | ~US$ 26      | ~US$ 48    |
+| **5 rps (dev)**       | 12.960.000   | ~US$ 13      | ~US$ 24    |
+| 1 rps (escritas)      | 2.592.000    | ~US$ 3       | ~US$ 5     |
+
+¹ US$ 1,00 por milhão de requisições. ² 512 MB, 200 ms médios.
+
+Para comparar: um app de uma cidade com alguns milhares de usuários ativos fica
+na casa de **100.000 requisições por mês**, ou 0,04 rps em média. O teto de
+10 rps é cerca de 250 vezes isso — generoso, mas não catastrófico.
+
+### Por que o DynamoDB tem teto próprio
+
+`GET /v1/collection-points/nearby` faz **no mínimo nove `Query`** no `GSI2-geo`,
+e a precisão 4 do geohash coloca quase toda Londrina em uma célula. Com mil
+pontos cadastrados, uma dessas nove consultas lê ~928 KB e custa ~116 unidades de
+leitura; a busca inteira custa praticamente isso.
+
+| Teto de leitura | Custo máximo/mês | Buscas `nearby`/s que permite |
+| --------------- | ---------------- | ----------------------------- |
+| sem teto        | ilimitado        | ilimitado                     |
+| 2.000 RCU/s     | ~US$ 648         | ~17                           |
+| **500 (prod)**  | ~US$ 162         | ~4                            |
+| **100 (dev)**   | ~US$ 32          | ~1                            |
+
+Consequência deliberada: **sob um laço de busca por proximidade o teto do
+DynamoDB corta antes do throttle de 10 rps da API.** As rotas baratas seguem
+servindo; a caríssima para de responder. A correção de fundo é a precisão do
+geohash, não o teto — ver [dynamodb.md](dynamodb.md).
+
+Escritas: um cadastro é uma transação de três itens (~6 WCU) e um evento de
+métrica é 1 WCU. Com as rotas de escrita em 1 rps, o teto de 20 WCU/s tem 3× de
+folga e **o limite da API é o que vincula**, não o do DynamoDB.
+
+### O throttle é global, não por IP
+
+Isto é o ponto mais importante desta seção. O throttling do API Gateway — tanto
+no v1 quanto no v2 — é **por estágio e por rota, nunca por endereço de origem**.
+Quem saturar os 10 rps derruba a API **para todos**: as requisições legítimas
+passam a receber 429.
+
+Ou seja, estes tetos trocam **fatura por indisponibilidade**. É uma troca
+escolhida, não um efeito colateral: para um produto gratuito mantido por uma
+pessoa, uma indisponibilidade temporária é recuperável e uma fatura de quatro
+dígitos não é. Rate limit por IP exigiria CloudFront na frente, registrado como
+próximo passo na [ADR-008](decisions/ADR-008-protecao-contra-abuso.md).
+
 ## Variables
 
 | Variável (stack)                    | Padrão   | Para que serve                                    |
@@ -103,12 +169,16 @@ senha não pertence ao state.
 | `geocoding_user_agent`              | —        | identificação exigida pela política do provedor    |
 | `geocoding_timeout_ms`              | `4000`   | timeout da geocodificação                          |
 | `public_lambda_memory_size`         | `512`    | memória da função pública                          |
-| `public_lambda_timeout_seconds`     | `15`     | deve ser maior que o timeout da geocodificação     |
+| `public_lambda_timeout_seconds`     | `8`      | deve ser maior que o timeout da geocodificação     |
 | `public_lambda_reserved_concurrency`| `-1`     | teto de concorrência (proteção de custo)           |
 | `admin_lambda_memory_size`          | `256`    | memória da função administrativa                   |
 | `admin_lambda_timeout_seconds`      | `10`     | timeout da função administrativa                   |
 | `admin_lambda_reserved_concurrency` | `-1`     | teto de concorrência                               |
 | `api_throttling_rate_limit`         | `20`     | req/s em regime permanente                         |
+| `table_max_read_request_units`      | `500`    | teto de leitura do DynamoDB (tabela e índices)      |
+| `table_max_write_request_units`     | `20`     | teto de escrita do DynamoDB                        |
+| `monthly_budget_usd`                | `20`     | orçamento mensal que dispara notificação           |
+| `cost_alert_email`                  | —        | destino das notificações; **sem padrão**            |
 | `api_throttling_burst_limit`        | `40`     | pico acima do regime                               |
 | `point_in_time_recovery_enabled`    | `false`  | backups contínuos do DynamoDB                      |
 | `deletion_protection_enabled`       | `false`  | impede destruir a tabela                           |
@@ -125,8 +195,11 @@ Diferenças efetivas entre ambientes:
 | PITR                  | desligado  | **ligado** |
 | Deletion protection   | desligada  | **ligada** |
 | MFA administrativo    | `OPTIONAL` | **`ON`**   |
-| Throttling            | 10 / 20    | 50 / 100   |
-| Concorrência reservada| **5 / 1**  | 20 / 2     |
+| Throttling            | 5 / 10     | 10 / 30    |
+| Throttling de escrita | 1 / 5      | 1 / 5      |
+| Teto DynamoDB (R/W)   | 100 / 10   | 500 / 20   |
+| Concorrência reservada| 5 / 1      | 20 / 2     |
+| Orçamento mensal      | US$ 5      | US$ 25     |
 
 ## Outputs
 
@@ -137,6 +210,7 @@ Diferenças efetivas entre ambientes:
 | `admin_user_pool_id` | onde criar a conta administrativa                            |
 | `admin_client_id`    | valor de `EXPO_PUBLIC_COGNITO_CLIENT_ID` no app              |
 | `log_groups`         | log groups a inspecionar em um diagnóstico                   |
+| `cost_guardrails`    | orçamento, tópico de alerta e limiar de cada alarme          |
 
 `modules/stack` também expõe `lambda_package_sizes_bytes`, útil para perceber
 crescimento indevido do bundle.

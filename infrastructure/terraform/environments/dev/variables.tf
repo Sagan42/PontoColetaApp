@@ -9,3 +9,10 @@ variable "geocoding_user_agent" {
   type        = string
   default     = "PontoColeta-dev/1.0 (contato@example.com)"
 }
+
+# No default: terraform asks for it, or it comes from a tfvars file. A budget
+# alert sent nowhere is the same as no budget alert.
+variable "cost_alert_email" {
+  description = "Address that receives the budget notifications and the abuse alarms of dev."
+  type        = string
+}

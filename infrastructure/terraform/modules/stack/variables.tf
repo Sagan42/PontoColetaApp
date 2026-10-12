@@ -57,7 +57,12 @@ variable "public_lambda_memory_size" {
 variable "public_lambda_timeout_seconds" {
   description = "Timeout of the public API function. It must exceed the geocoding timeout."
   type        = number
-  default     = 15
+  default     = 8
+
+  validation {
+    condition     = var.public_lambda_timeout_seconds * 1000 > var.geocoding_timeout_ms
+    error_message = "public_lambda_timeout_seconds must exceed geocoding_timeout_ms, or a slow geocoding call kills the invocation before it can answer."
+  }
 }
 
 variable "public_lambda_reserved_concurrency" {
@@ -96,6 +101,18 @@ variable "api_throttling_burst_limit" {
   default     = 40
 }
 
+variable "table_max_read_request_units" {
+  description = "Read units per second the table may scale to. Ceiling against an abusive read loop."
+  type        = number
+  default     = 500
+}
+
+variable "table_max_write_request_units" {
+  description = "Write units per second the table may scale to."
+  type        = number
+  default     = 20
+}
+
 variable "point_in_time_recovery_enabled" {
   description = "Enables continuous DynamoDB backups."
   type        = bool
@@ -112,6 +129,17 @@ variable "admin_mfa_configuration" {
   description = "MFA policy of the administrative user pool."
   type        = string
   default     = "OPTIONAL"
+}
+
+variable "monthly_budget_usd" {
+  description = "Monthly budget in USD. Notifications fire at 50, 80 and 100 percent of actual spend, and at 100 percent of the forecast."
+  type        = number
+  default     = 20
+}
+
+variable "cost_alert_email" {
+  description = "Address that receives the budget notifications and the CloudWatch alarms. No default on purpose: an alert nobody reads is not an alert."
+  type        = string
 }
 
 variable "tags" {

@@ -45,6 +45,16 @@ resource "aws_apigatewayv2_stage" "default" {
     throttling_rate_limit  = var.throttling_rate_limit
   }
 
+  dynamic "route_settings" {
+    for_each = var.route_throttling
+
+    content {
+      route_key              = route_settings.key
+      throttling_rate_limit  = route_settings.value.rate_limit
+      throttling_burst_limit = route_settings.value.burst_limit
+    }
+  }
+
   tags = var.tags
 }
 

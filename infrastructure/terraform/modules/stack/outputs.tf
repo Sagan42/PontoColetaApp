@@ -27,6 +27,16 @@ output "log_groups" {
   }
 }
 
+output "cost_guardrails" {
+  description = "Budget, alert topic and alarm thresholds protecting this environment."
+  value = {
+    monthly_budget_usd = module.cost_guardrails.monthly_budget_usd
+    alerts_topic_arn   = module.cost_guardrails.alerts_topic_arn
+    alarm_names        = module.cost_guardrails.alarm_names
+    alarm_thresholds   = module.cost_guardrails.alarm_thresholds
+  }
+}
+
 output "lambda_package_sizes_bytes" {
   description = "Size of each deployment package, to keep an eye on bundle growth."
   value = {

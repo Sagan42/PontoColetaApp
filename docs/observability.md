@@ -173,9 +173,61 @@ fields @timestamp, message, waitedMs, retried, cacheHit
 | stats count() by message, retried
 ```
 
+## Alarmes
+
+Declarados em `modules/cost-guardrails`. Todos têm um propósito só: avisar que um
+dos tetos de custo está sendo alcançado, enquanto ainda é barato. Ver
+[ADR-008](decisions/ADR-008-protecao-contra-abuso.md).
+
+| Alarme                          | Métrica                               | Limiar                                      |
+| ------------------------------- | ------------------------------------- | ------------------------------------------- |
+| `<env>-api-request-flood`       | `AWS/ApiGateway` `Count` (Sum)         | metade do teto de rps, por 5 min            |
+| `<env>-public-lambda-concurrency` | `AWS/Lambda` `ConcurrentExecutions` (Max) | 80% da concorrência reservada          |
+| `<env>-table-read-capacity`     | `AWS/DynamoDB` `ConsumedReadCapacityUnits` (Sum) | metade do teto de leitura, por 5 min |
+
+Nenhum limiar é um número solto: cada um deriva do teto que o ambiente declara,
+então afrouxar um limite move o alarme junto. Em prod isso dá 1.500 requisições
+por 5 minutos, 16 execuções concorrentes e 75.000 unidades de leitura por
+5 minutos.
+
+Decisões por trás deles:
+
+- **Janela de 5 minutos.** Curta o bastante para pegar abuso sustentado
+  enquanto é barato, longa o bastante para que uma rajada isolada não avise
+  ninguém.
+- **Metade do teto, não o teto.** No teto já houve 429 para gente legítima. A
+  metade é o ponto em que ainda há o que fazer, e segue duas ordens de grandeza
+  acima do uso plausível.
+- **`treat_missing_data = "notBreaching"`.** Sem tráfego não é problema. Um
+  alarme que grita com API parada é um alarme que ninguém lê.
+- **`ok_actions` só no alarme de requisições**, para fechar o ciclo do evento que
+  mais importa: saber que a enxurrada passou.
+
+Destino: um tópico SNS por ambiente, com assinatura de e-mail. **A assinatura
+nasce pendente** — a AWS manda um link de confirmação, e até alguém clicar o
+alarme dispara sem avisar ninguém. É o primeiro passo após o primeiro apply.
+
+## Orçamento
+
+`aws_budgets_budget` mensal em USD por ambiente (US$ 25 em prod, US$ 5 em dev),
+notificando em 50%, 80% e 100% do gasto **real** e em 100% do **previsto**. O
+previsto é o que chega cedo o bastante para agir.
+
+O orçamento fala direto com o e-mail, não pelo tópico SNS: um destino SNS exigiria
+uma política no tópico autorizando `budgets.amazonaws.com` a publicar, mais peças
+móveis para o mesmo e-mail.
+
+Orçamento e alarme respondem perguntas diferentes: o alarme diz **agora** que o
+tráfego está anormal; o orçamento diz que o **mês** está caro, inclusive por
+motivos que nenhum alarme cobre.
+
 ## O que ainda não existe
 
-Alarmes do CloudWatch (taxa de 5xx, throttling do DynamoDB, erros de Lambda) não
-foram declarados. Fazem sentido depois do primeiro deploy, quando houver linha de
-base — criar alarme sem tráfego real só produz ruído. É a primeira adição
-recomendada em observabilidade.
+Alarmes de saúde — taxa de 5xx, throttling do DynamoDB, erros e duração das
+Lambdas — ainda não foram declarados. Os desta etapa são de **custo**, não de
+saúde: eles avisam que alguém está abusando, não que o produto está quebrado.
+Alarme de saúde precisa de linha de base para não ser ruído, e linha de base
+exige tráfego real; é a primeira adição recomendada depois do primeiro deploy.
+
+Também não há painel. As consultas do Logs Insights acima cobrem o diagnóstico
+pontual; painel só se paga quando alguém olha todo dia.

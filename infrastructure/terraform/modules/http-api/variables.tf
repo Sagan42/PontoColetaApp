@@ -67,6 +67,20 @@ variable "admin_jwt_audience" {
 # sends an Origin header, so it needs no CORS at all. Open an origin only for a
 # local tool that genuinely needs one, adding that exact origin case by case —
 # never "*", which would let any web page in any browser call this API.
+# Writes cost more than reads downstream: a point creation is a transactional
+# write plus a geocoding call, and a metric event writes on every app open. They
+# get a tighter ceiling than the stage default so a flood of writes cannot ride
+# in under the overall rate.
+variable "route_throttling" {
+  description = "Per-route throttling on top of default_route_settings, keyed by route key."
+  type        = map(object({ rate_limit = number, burst_limit = number }))
+
+  default = {
+    "POST /v1/collection-points" = { rate_limit = 1, burst_limit = 5 }
+    "POST /v1/metrics/events"    = { rate_limit = 1, burst_limit = 5 }
+  }
+}
+
 variable "cors_allow_origins" {
   description = "Origins allowed by CORS. Empty disables it. The mobile app does not need CORS; add an exact origin only for a local tool that does."
   type        = list(string)

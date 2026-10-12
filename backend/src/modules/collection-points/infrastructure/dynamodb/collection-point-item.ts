@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { encodeGeohash } from '../../../../shared/domain/geo/index.js';
+import { slugify } from '../../../../shared/domain/text/index.js';
 import { CollectionPoint } from '../../domain/collection-point.js';
 import {
   CollectionPointStatus,
@@ -12,9 +13,16 @@ export const GEOHASH_PARTITION_PRECISION = 4;
 
 export const GEOHASH_STORED_PRECISION = 9;
 
+/**
+ * Cell behind the uniqueness item: about 153 m x 140 m at this latitude, so it
+ * matches the radius the duplicate pre-check uses.
+ */
+export const GEOHASH_UNIQUENESS_PRECISION = 7;
+
 export const ITEM_TYPE = {
   CollectionPoint: 'CollectionPoint',
   CollectionPointMaterial: 'CollectionPointMaterial',
+  CollectionPointUniqueness: 'CollectionPointUniqueness',
 } as const;
 
 export const keys = {
@@ -26,6 +34,8 @@ export const keys = {
   statusPartition: (status: Status): string => `STATUS#${status}`,
   statusSortKey: (createdAt: string, id: string): string => `${createdAt}#${id}`,
   geoPartition: (geohashPrefix: string): string => `GEO#${geohashPrefix}`,
+  uniquenessSortKey: (nameSlug: string, geohashCell: string): string =>
+    `UNIQUE#POINT#${nameSlug}#${geohashCell}`,
 } as const;
 
 const materialSchema = z.object({ label: z.string(), slug: z.string() });
@@ -140,4 +150,39 @@ export function pointIdFromMaterialLink(sortKey: string): string {
   const marker = '#POINT#';
   const index = sortKey.indexOf(marker);
   return index === -1 ? '' : sortKey.slice(index + marker.length);
+}
+
+export interface UniquenessItem {
+  PK: string;
+  SK: string;
+  entityType: typeof ITEM_TYPE.CollectionPointUniqueness;
+  pointId: string;
+  nameSlug: string;
+  geohashCell: string;
+  createdAt: string;
+}
+
+/**
+ * Claim on "this name, at this place". Written in the same transaction as the
+ * point under attribute_not_exists, so of two concurrent registrations of the
+ * same place only the first can commit.
+ */
+export function toUniquenessItem(point: CollectionPoint): UniquenessItem {
+  const snapshot = point.toSnapshot();
+  const nameSlug = slugify(snapshot.name);
+  const geohashCell = encodeGeohash(
+    snapshot.latitude,
+    snapshot.longitude,
+    GEOHASH_UNIQUENESS_PRECISION,
+  );
+
+  return {
+    PK: keys.cityPartition(),
+    SK: keys.uniquenessSortKey(nameSlug, geohashCell),
+    entityType: ITEM_TYPE.CollectionPointUniqueness,
+    pointId: snapshot.id,
+    nameSlug,
+    geohashCell,
+    createdAt: snapshot.createdAt,
+  };
 }

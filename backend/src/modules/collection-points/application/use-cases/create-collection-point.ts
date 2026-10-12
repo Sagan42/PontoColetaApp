@@ -2,7 +2,11 @@ import type { Clock, IdGenerator, Logger } from '../../../../shared/application/
 import { ConflictError, ValidationError } from '../../../../shared/domain/errors/index.js';
 import { slugify } from '../../../../shared/domain/text/index.js';
 import { UsageMetricType } from '../../../metrics/domain/index.js';
-import { CollectionPoint, type CollectionPointSnapshot } from '../../domain/collection-point.js';
+import {
+  CollectionPoint,
+  DUPLICATE_POINT_MESSAGE,
+  type CollectionPointSnapshot,
+} from '../../domain/collection-point.js';
 import type { CollectionPointRepository } from '../../domain/repositories/collection-point-repository.js';
 import { SERVICE_AREA, isWithinServiceArea } from '../../domain/service-area.js';
 import { Address } from '../../domain/value-objects/address.js';
@@ -111,7 +115,7 @@ export class CreateCollectionPoint {
     const duplicated = neighbours.some((point) => slugify(point.name) === nameSlug);
 
     if (duplicated) {
-      throw new ConflictError('Esse ponto de coleta já está cadastrado.');
+      throw new ConflictError(DUPLICATE_POINT_MESSAGE);
     }
   }
 

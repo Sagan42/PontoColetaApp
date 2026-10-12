@@ -70,7 +70,39 @@ O ponto e todos os seus itens auxiliares são gravados em uma única
 `TransactWriteItems`: um ponto nunca fica visível sem ser localizável por
 material.
 
-### 3. Métricas diárias
+### 3. Item de unicidade
+
+Um por ponto. É a **garantia transacional** contra cadastro duplicado: a chave
+deriva do slug do nome mais a célula geohash de precisão 7 (cerca de 153 m x
+140 m na latitude de Londrina, a mesma escala do raio de 150 m usado na
+verificação prévia).
+
+```text
+PK  = CITY#LONDRINA
+SK  = UNIQUE#POINT#<slug do nome>#<geohash precisão 7>
+```
+
+Atributos: `entityType`, `pointId`, `nameSlug`, `geohashCell`, `createdAt`.
+
+Vai na **mesma** `TransactWriteItems` do ponto e dos itens de material, e é o
+único dos três com `ConditionExpression: attribute_not_exists(PK)`. De dois
+cadastros simultâneos do mesmo lugar, só o primeiro comita; o segundo é
+cancelado pelo banco e o repositório traduz a cancelação para `ConflictError`
+(409, "Esse ponto de coleta já está cadastrado.").
+
+A verificação prévia por proximidade continua existindo, para a pessoa receber
+409 rápido no caso comum sem pagar uma transação. A diferença é que ela deixou
+de ser a única barreira.
+
+**Limite conhecido.** Célula é caixa, não círculo: dois cadastros do mesmo nome a
+poucos metros um do outro, mas em lados opostos de uma borda de célula, recebem
+chaves diferentes e ambos passam. Isso acontece quando as coordenadas vêm do GPS
+do aparelho e não do geocodificador — pelo mesmo endereço, o geocodificador
+devolve as mesmas coordenadas e a célula é a mesma. Reduzir essa brecha exigiria
+gravar uma claim por célula vizinha (nove itens por ponto), o que não se paga
+enquanto o caso dominante é o endereço geocodificado.
+
+### 4. Métricas diárias
 
 ```text
 PK = METRICS#<AAAA-MM>
@@ -91,6 +123,7 @@ concorrentes. Eventos individuais **nunca** são armazenados.
 | Buscar por material            | tabela principal, `PK = CITY#LONDRINA` + `begins_with(SK, "MATERIAL#<slug>#POINT#")` → ids → itens      | `Query` + `BatchGetItem`    |
 | Buscar por status              | `GSI1-status` com `GSI1PK = STATUS#<status>`                                                           | `Query`                     |
 | Buscar por proximidade         | `GSI2-geo`, uma consulta por célula que cobre o círculo, depois filtro/ordenação por Haversine          | `Query` × N (N ≤ 9)         |
+| Cadastrar ponto                | ponto + itens de material + item de unicidade com `attribute_not_exists`                               | `TransactWriteItems`        |
 | Registrar métrica              | `PK = METRICS#<mês>`, `SK = DATE#<dia>`, `ADD <tipo> :1`                                                | `UpdateItem`                |
 | Consultar métricas por período | um `Query` por mês do período, `SK BETWEEN`                                                            | `Query` × meses (≤ 13)      |
 

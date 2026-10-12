@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { ConflictError, ValidationError } from '../../src/shared/domain/errors/index.js';
 import { CreateCollectionPoint } from '../../src/modules/collection-points/application/use-cases/create-collection-point.js';
+import {
+  DUPLICATE_POINT_MESSAGE,
+  type CollectionPoint,
+} from '../../src/modules/collection-points/domain/collection-point.js';
 import { Coordinates } from '../../src/modules/collection-points/domain/value-objects/coordinates.js';
 import { UsageMetricType } from '../../src/modules/metrics/domain/index.js';
 import {
@@ -132,3 +136,122 @@ describe('CreateCollectionPoint', () => {
     await expect(resilient.execute(validInput)).resolves.toMatchObject({ status: 'PUBLISHED' });
   });
 });
+
+/**
+ * Stands in for the transactional claim: the proximity check sees nothing (as it
+ * does when two registrations race), and the store itself refuses the second
+ * write of a name it already holds.
+ */
+class RacingRepository extends InMemoryCollectionPointRepository {
+  readonly saveAttempts: string[] = [];
+  private readonly claimed = new Set<string>();
+
+  override save(point: CollectionPoint): Promise<void> {
+    this.saveAttempts.push(point.name);
+
+    if (this.claimed.has(point.name)) {
+      return Promise.reject(new ConflictError(DUPLICATE_POINT_MESSAGE));
+    }
+
+    this.claimed.add(point.name);
+    return super.save(point);
+  }
+
+  // A racing registration cannot see the other one yet.
+  override findNearby(): Promise<CollectionPoint[]> {
+    return Promise.resolve([]);
+  }
+}
+
+describe('CreateCollectionPoint under a concurrent duplicate', () => {
+  let repository: RacingRepository;
+  let metrics: RecordingMetricRecorder;
+  let useCase: CreateCollectionPoint;
+
+  beforeEach(() => {
+    repository = new RacingRepository();
+    metrics = new RecordingMetricRecorder();
+    useCase = new CreateCollectionPoint(
+      repository,
+      new FakeGeocodingService(),
+      new SequentialIdGenerator(),
+      new FixedClock(new Date('2026-08-22T12:00:00.000Z')),
+      metrics,
+      silentLogger,
+    );
+  });
+
+  it('lets exactly one of two simultaneous registrations through', async () => {
+    const settled = await Promise.allSettled([
+      useCase.execute(validInput),
+      useCase.execute(validInput),
+    ]);
+
+    const fulfilled = settled.filter((entry) => entry.status === 'fulfilled');
+    const rejected = settled.filter((entry) => entry.status === 'rejected');
+
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    // Both got past the pre-check; the store is what separated them.
+    expect(repository.saveAttempts).toHaveLength(2);
+    expect(repository.points.size).toBe(1);
+  });
+
+  it('reports the loser with the same message and code as the pre-check', async () => {
+    await useCase.execute(validInput);
+
+    const failure = useCase.execute(validInput);
+
+    await expect(failure).rejects.toBeInstanceOf(ConflictError);
+    await expect(failure).rejects.toThrow('Esse ponto de coleta já está cadastrado.');
+    await expect(failure).rejects.toMatchObject({ code: 'CONFLICT' });
+  });
+
+  it('does not count a contribution that lost the race', async () => {
+    await useCase.execute(validInput);
+    metrics.recorded.length = 0;
+
+    await expect(useCase.execute(validInput)).rejects.toBeInstanceOf(ConflictError);
+
+    expect(metrics.recorded).toEqual([]);
+  });
+
+  it('still registers a different point at the same place', async () => {
+    await useCase.execute(validInput);
+
+    await expect(
+      useCase.execute({ ...validInput, name: 'Cooperativa Norte' }),
+    ).resolves.toMatchObject({ name: 'Cooperativa Norte' });
+    expect(repository.points.size).toBe(2);
+  });
+});
+
+describe('CreateCollectionPoint pre-check', () => {
+  it('answers without attempting a write when the duplicate is already visible', async () => {
+    const repository = new RecordingRepository();
+    const useCase = new CreateCollectionPoint(
+      repository,
+      new FakeGeocodingService(),
+      new SequentialIdGenerator(),
+      new FixedClock(new Date('2026-08-22T12:00:00.000Z')),
+      new RecordingMetricRecorder(),
+      silentLogger,
+    );
+
+    await useCase.execute(validInput);
+    repository.saveAttempts.length = 0;
+
+    await expect(useCase.execute(validInput)).rejects.toBeInstanceOf(ConflictError);
+    // The fast path: the person hears back without the store being touched.
+    expect(repository.saveAttempts).toEqual([]);
+  });
+});
+
+class RecordingRepository extends InMemoryCollectionPointRepository {
+  readonly saveAttempts: string[] = [];
+
+  override save(point: CollectionPoint): Promise<void> {
+    this.saveAttempts.push(point.name);
+    return super.save(point);
+  }
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { ConflictError } from '../../src/shared/domain/errors/index.js';
 import { CollectionPoint } from '../../src/modules/collection-points/domain/collection-point.js';
 import { Address } from '../../src/modules/collection-points/domain/value-objects/address.js';
 import { Coordinates } from '../../src/modules/collection-points/domain/value-objects/coordinates.js';
@@ -91,7 +92,7 @@ function queries(sent: { name: string; input: Record<string, unknown> }[]) {
 }
 
 describe('DynamoCollectionPointRepository', () => {
-  it('writes the point and its material links in one transaction', async () => {
+  it('writes the point, its material links and its uniqueness claim in one transaction', async () => {
     const { client, sent } = stubClient();
     const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
 
@@ -99,10 +100,19 @@ describe('DynamoCollectionPointRepository', () => {
 
     expect(sent).toHaveLength(1);
     expect(sent[0]?.name).toBe('TransactWriteCommand');
-    const transactItems = sent[0]?.input.TransactItems as { Put: { Item: { SK: string } } }[];
+    const transactItems = sent[0]?.input.TransactItems as {
+      Put: { Item: { SK: string }; ConditionExpression?: string };
+    }[];
     expect(transactItems.map((entry) => entry.Put.Item.SK)).toEqual([
       'POINT#point-1',
       'MATERIAL#pilhas#POINT#point-1',
+      'UNIQUE#POINT#ecoponto-point-1#6gge7u2',
+    ]);
+    // Only the claim is conditional: the point and its links must land with it.
+    expect(transactItems.map((entry) => entry.Put.ConditionExpression)).toEqual([
+      undefined,
+      undefined,
+      'attribute_not_exists(PK)',
     ]);
   });
 
@@ -643,3 +653,105 @@ describe('DynamoCollectionPointRepository nearby paging', () => {
     expect(warnings).toEqual([]);
   });
 });
+
+describe('DynamoCollectionPointRepository duplicate claims', () => {
+  /** Shaped like the SDK error: name plus one cancellation reason per item. */
+  function transactionCancelled(codes: (string | undefined)[]): Error {
+    const error = new Error('Transaction cancelled, please refer cancellation reasons');
+    error.name = 'TransactionCanceledException';
+    return Object.assign(error, {
+      CancellationReasons: codes.map((Code) => (Code === undefined ? {} : { Code })),
+    });
+  }
+
+  function rejectingClient(error: Error) {
+    const send = vi.fn(() => Promise.reject(error));
+    return { client: { send } as unknown as DynamoDBDocumentClient, send };
+  }
+
+  it('turns the losing concurrent write into a conflict the person can read', async () => {
+    const { client } = rejectingClient(
+      transactionCancelled(['None', 'None', 'ConditionalCheckFailed']),
+    );
+    const { logger, warnings } = createRecordingLogger();
+    const repository = new DynamoCollectionPointRepository(client, TABLE, logger);
+
+    const failure = repository.save(buildPoint('point-2'));
+
+    await expect(failure).rejects.toBeInstanceOf(ConflictError);
+    await expect(failure).rejects.toThrow('Esse ponto de coleta já está cadastrado.');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]?.message).toBe('collection_point.save.conflict');
+    expect(warnings[0]?.context).toMatchObject({
+      nameSlug: 'ecoponto-point-2',
+      geohashCell: '6gge7u2',
+    });
+  });
+
+  it('keeps the CONFLICT code so the route answers 409', async () => {
+    const { client } = rejectingClient(transactionCancelled(['ConditionalCheckFailed']));
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    await expect(repository.save(buildPoint('point-1'))).rejects.toMatchObject({
+      code: 'CONFLICT',
+    });
+  });
+
+  it('lets a cancellation for any other reason through untouched', async () => {
+    const throughput = transactionCancelled(['ProvisionedThroughputExceeded']);
+    const { client } = rejectingClient(throughput);
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    const failure = repository.save(buildPoint('point-1'));
+
+    await expect(failure).rejects.toBe(throughput);
+    await expect(failure).rejects.not.toBeInstanceOf(ConflictError);
+  });
+
+  it('does not mistake an unrelated failure for a duplicate', async () => {
+    const network = new Error('socket hang up');
+    const { client } = rejectingClient(network);
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    await expect(repository.save(buildPoint('point-1'))).rejects.toBe(network);
+  });
+
+  it('claims the same key for two points registered under the same name and place', async () => {
+    const first = stubClient();
+    const second = stubClient();
+
+    await new DynamoCollectionPointRepository(first.client, TABLE, silentLogger).save(
+      CollectionPoint.create(
+        {
+          name: 'Ecoponto Centro',
+          address: Address.create('Rua Pará, 500'),
+          coordinates: Coordinates.create(-23.3103, -51.1628),
+          materials: [Material.create('Pilhas')],
+        },
+        { id: 'first', now },
+      ),
+    );
+
+    // Same name, 20 m away, and a different id: still the same claim.
+    await new DynamoCollectionPointRepository(second.client, TABLE, silentLogger).save(
+      CollectionPoint.create(
+        {
+          name: 'ECOPONTO  Centro!',
+          address: Address.create('Rua Pará, 510'),
+          coordinates: Coordinates.create(-23.31048, -51.1628),
+          materials: [Material.create('Pilhas')],
+        },
+        { id: 'second', now },
+      ),
+    );
+
+    expect(claimKeyOf(first.sent[0])).toBe(claimKeyOf(second.sent[0]));
+  });
+});
+
+function claimKeyOf(command: { input: Record<string, unknown> } | undefined): string {
+  const items = command?.input.TransactItems as { Put: { Item: { SK: string } } }[] | undefined;
+  return (
+    (items ?? []).map((entry) => entry.Put.Item.SK).find((sk) => sk.startsWith('UNIQUE#')) ?? ''
+  );
+}

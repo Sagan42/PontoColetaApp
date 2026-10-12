@@ -7,13 +7,14 @@ import {
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
 import type { Logger } from '../../../../shared/application/ports/index.js';
+import { ConflictError } from '../../../../shared/domain/errors/index.js';
 import { geohashCellsCovering } from '../../../../shared/domain/geo/index.js';
 import {
   decodeCursor,
   encodeCursor,
   type DynamoKey,
 } from '../../../../shared/infrastructure/dynamodb/index.js';
-import type { CollectionPoint } from '../../domain/collection-point.js';
+import { DUPLICATE_POINT_MESSAGE, type CollectionPoint } from '../../domain/collection-point.js';
 import type { CollectionPointStatus } from '../../domain/collection-point-status.js';
 import { CollectionPointStatus as Status } from '../../domain/collection-point-status.js';
 import type {
@@ -29,6 +30,7 @@ import {
   toDomain,
   toItem,
   toMaterialLinkItems,
+  toUniquenessItem,
 } from './collection-point-item.js';
 
 export const INDEX_NAMES = {
@@ -41,6 +43,22 @@ const MAX_BATCH_GET_ATTEMPTS = 5;
 const BATCH_GET_BASE_DELAY_MS = 50;
 const MAX_MATERIAL_LINK_PAGES = 5;
 const MAX_GEO_PAGES_PER_CELL = 10;
+
+interface CancellationReason {
+  Code?: string;
+}
+
+/**
+ * A cancelled transaction reports one reason per item. Only the uniqueness Put
+ * carries a condition, so a ConditionalCheckFailed among them means exactly
+ * one thing: someone else already claimed this place.
+ */
+function isConditionalCheckFailure(error: unknown): boolean {
+  if (!(error instanceof Error) || error.name !== 'TransactionCanceledException') return false;
+
+  const reasons = (error as { CancellationReasons?: CancellationReason[] }).CancellationReasons;
+  return (reasons ?? []).some((reason) => reason.Code === 'ConditionalCheckFailed');
+}
 
 type BatchGetKeys = NonNullable<
   NonNullable<NonNullable<BatchGetCommandOutput['UnprocessedKeys']>[string]>['Keys']
@@ -60,18 +78,44 @@ export class DynamoCollectionPointRepository implements CollectionPointRepositor
     private readonly wait: (ms: number) => Promise<void> = waitMs,
   ) {}
 
+  /**
+   * The point, its material links and its uniqueness claim go in one
+   * transaction. The claim carries attribute_not_exists, so two concurrent
+   * registrations of the same name at the same place cannot both commit: the
+   * loser is cancelled by the database, not by a check that raced.
+   */
   async save(point: CollectionPoint): Promise<void> {
     const item = toItem(point);
     const links = toMaterialLinkItems(point);
+    const uniqueness = toUniquenessItem(point);
 
-    await this.client.send(
-      new TransactWriteCommand({
-        TransactItems: [
-          { Put: { TableName: this.tableName, Item: item } },
-          ...links.map((link) => ({ Put: { TableName: this.tableName, Item: link } })),
-        ],
-      }),
-    );
+    try {
+      await this.client.send(
+        new TransactWriteCommand({
+          TransactItems: [
+            { Put: { TableName: this.tableName, Item: item } },
+            ...links.map((link) => ({ Put: { TableName: this.tableName, Item: link } })),
+            {
+              Put: {
+                TableName: this.tableName,
+                Item: uniqueness,
+                ConditionExpression: 'attribute_not_exists(PK)',
+              },
+            },
+          ],
+        }),
+      );
+    } catch (error) {
+      if (!isConditionalCheckFailure(error)) throw error;
+
+      this.logger.warn('collection_point.save.conflict', {
+        operation: 'DynamoCollectionPointRepository.save',
+        nameSlug: uniqueness.nameSlug,
+        geohashCell: uniqueness.geohashCell,
+      });
+
+      throw new ConflictError(DUPLICATE_POINT_MESSAGE);
+    }
   }
 
   async findById(id: string): Promise<CollectionPoint | null> {

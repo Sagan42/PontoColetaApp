@@ -5,10 +5,12 @@ import { Coordinates } from '../../src/modules/collection-points/domain/value-ob
 import { Material } from '../../src/modules/collection-points/domain/value-objects/material.js';
 import { OpeningHours } from '../../src/modules/collection-points/domain/value-objects/opening-hours.js';
 import {
+  GEOHASH_UNIQUENESS_PRECISION,
   pointIdFromMaterialLink,
   toDomain,
   toItem,
   toMaterialLinkItems,
+  toUniquenessItem,
 } from '../../src/modules/collection-points/infrastructure/dynamodb/collection-point-item.js';
 
 const now = new Date('2026-08-22T12:00:00.000Z');
@@ -82,5 +84,58 @@ describe('collection point item mapping', () => {
   it('extracts the point id back from an auxiliary sort key', () => {
     expect(pointIdFromMaterialLink('MATERIAL#oleo-de-cozinha#POINT#point-1')).toBe('point-1');
     expect(pointIdFromMaterialLink('POINT#point-1')).toBe('');
+  });
+});
+
+describe('collection point uniqueness item', () => {
+  function pointAt(name: string, latitude: number, longitude: number): CollectionPoint {
+    return CollectionPoint.create(
+      {
+        name,
+        address: Address.create('Rua Pará, 500'),
+        coordinates: Coordinates.create(latitude, longitude),
+        materials: [Material.create('Pilhas')],
+      },
+      { id: 'point-1', now: new Date('2026-08-22T12:00:00.000Z') },
+    );
+  }
+
+  it('keys the claim on the name slug and a high precision cell', () => {
+    const item = toUniquenessItem(pointAt('Ecoponto Centro', -23.3103, -51.1628));
+
+    expect(item.PK).toBe('CITY#LONDRINA');
+    expect(item.SK).toBe('UNIQUE#POINT#ecoponto-centro#6gge7u2');
+    expect(item.entityType).toBe('CollectionPointUniqueness');
+    expect(item.nameSlug).toBe('ecoponto-centro');
+    expect(item.geohashCell).toHaveLength(GEOHASH_UNIQUENESS_PRECISION);
+    expect(item.pointId).toBe('point-1');
+  });
+
+  it('ignores case, accents and spacing in the name, as the pre-check does', () => {
+    const plain = toUniquenessItem(pointAt('Ecoponto Centro', -23.3103, -51.1628));
+    const noisy = toUniquenessItem(pointAt('  ECOPONTO   Cêntro  ', -23.3103, -51.1628));
+
+    expect(noisy.SK).toBe(plain.SK);
+  });
+
+  it('claims one key for the same name a few metres apart', () => {
+    const first = toUniquenessItem(pointAt('Ecoponto Centro', -23.3103, -51.1628));
+    const metresAway = toUniquenessItem(pointAt('Ecoponto Centro', -23.31045, -51.16295));
+
+    expect(metresAway.SK).toBe(first.SK);
+  });
+
+  it('leaves a different name at the same place free to register', () => {
+    const first = toUniquenessItem(pointAt('Ecoponto Centro', -23.3103, -51.1628));
+    const other = toUniquenessItem(pointAt('Cooperativa Norte', -23.3103, -51.1628));
+
+    expect(other.SK).not.toBe(first.SK);
+  });
+
+  it('leaves the same name in another part of the city free to register', () => {
+    const centre = toUniquenessItem(pointAt('Ecoponto Centro', -23.3103, -51.1628));
+    const northern = toUniquenessItem(pointAt('Ecoponto Centro', -23.2567, -51.1789));
+
+    expect(northern.SK).not.toBe(centre.SK);
   });
 });

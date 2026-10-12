@@ -15,6 +15,12 @@ const MIN_NAME_LENGTH = 3;
 const MAX_NAME_LENGTH = 120;
 const MAX_MATERIALS = 10;
 
+/**
+ * Raised by the pre-check in the use case and by the transaction that enforces
+ * it, so the person reads the same thing either way.
+ */
+export const DUPLICATE_POINT_MESSAGE = 'Esse ponto de coleta já está cadastrado.';
+
 export interface CollectionPointProps {
   readonly id: string;
   readonly name: string;

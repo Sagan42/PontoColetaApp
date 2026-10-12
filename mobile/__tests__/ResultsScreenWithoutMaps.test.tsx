@@ -39,7 +39,7 @@ describe('Results without the maps native module', () => {
     jest.restoreAllMocks();
     jest
       .spyOn(collectionPointsApi, 'searchByMaterial')
-      .mockResolvedValue({ points: [point], origin: null });
+      .mockResolvedValue({ points: [point], origin: null, nextCursor: null });
   });
 
   it('mounts the screen and lists the results', async () => {

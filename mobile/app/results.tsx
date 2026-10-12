@@ -28,6 +28,12 @@ export default function ResultsScreen() {
     router.push({ pathname: '/point/[id]', params: { id } });
   }
 
+  // The map shows whatever the list has loaded; only scrolling the list asks
+  // for more. onEndReached also fires on short lists, hence the guard.
+  function loadMore() {
+    if (search.hasNextPage && !search.isFetchingNextPage) void search.fetchNextPage();
+  }
+
   return (
     <Screen footer={<BannerAdSlot testID="results-banner" />}>
       <View style={styles.header}>
@@ -77,6 +83,7 @@ export default function ResultsScreen() {
             data={points}
             keyExtractor={(point) => point.id}
             contentContainerStyle={styles.list}
+            testID="results-list"
             renderItem={({ item }) => (
               <CollectionPointCard
                 point={item}
@@ -89,6 +96,9 @@ export default function ResultsScreen() {
                 {points.length === 1 ? '1 ponto encontrado' : `${points.length} pontos encontrados`}
               </Text>
             }
+            onEndReached={loadMore}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={search.isFetchingNextPage ? <LoadingState /> : null}
           />
         )}
       </View>

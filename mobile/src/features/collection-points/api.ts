@@ -26,8 +26,16 @@ export const searchOriginSchema = z.object({
   formattedAddress: z.string().nullable(),
 });
 
-const collectionPointsEnvelope = apiEnvelope(z.array(collectionPointSchema));
 const collectionPointEnvelope = apiEnvelope(collectionPointSchema);
+
+/**
+ * Listings carry the cursor for the next page in `meta.nextCursor`. A malformed
+ * one reads as "no more pages": stopping early beats discarding good points.
+ */
+const listEnvelope = z.object({
+  data: z.array(collectionPointSchema),
+  meta: z.looseObject({ nextCursor: z.string().nullish().catch(null) }).optional(),
+});
 
 /**
  * The nearby endpoint reports where it searched from, under `meta.origin`. The
@@ -47,6 +55,8 @@ export type SearchOrigin = z.infer<typeof searchOriginSchema>;
 export interface CollectionPointsResult {
   points: CollectionPoint[];
   origin: SearchOrigin | null;
+  /** `null` once the server has no further page for this query. */
+  nextCursor: string | null;
 }
 
 export interface CreateCollectionPointPayload {
@@ -58,23 +68,30 @@ export interface CreateCollectionPointPayload {
 }
 
 export const collectionPointsApi = {
-  async listAll(signal?: AbortSignal): Promise<CollectionPointsResult> {
+  async listAll(cursor?: string | null, signal?: AbortSignal): Promise<CollectionPointsResult> {
     const response = await apiRequest('/v1/collection-points', {
-      schema: collectionPointsEnvelope,
+      schema: listEnvelope,
+      query: { cursor: cursor ?? undefined },
       signal,
     });
-    return { points: response.data, origin: null };
+    return { points: response.data, origin: null, nextCursor: response.meta?.nextCursor ?? null };
   },
 
-  async searchByMaterial(material: string, signal?: AbortSignal): Promise<CollectionPointsResult> {
+  async searchByMaterial(
+    material: string,
+    cursor?: string | null,
+    signal?: AbortSignal,
+  ): Promise<CollectionPointsResult> {
     const response = await apiRequest('/v1/collection-points', {
-      schema: collectionPointsEnvelope,
-      query: { material },
+      schema: listEnvelope,
+      query: { material, cursor: cursor ?? undefined },
       signal,
     });
-    return { points: response.data, origin: null };
+    return { points: response.data, origin: null, nextCursor: response.meta?.nextCursor ?? null };
   },
 
+  // Nearby ranks by distance over the covering cells; there is no cursor to
+  // follow, so this one stays a single request.
   async searchByAddress(address: string, signal?: AbortSignal): Promise<CollectionPointsResult> {
     const response = await apiRequest('/v1/collection-points/nearby', {
       schema: nearbyEnvelope,
@@ -82,7 +99,7 @@ export const collectionPointsApi = {
       signal,
     });
 
-    return { points: response.data, origin: response.meta?.origin ?? null };
+    return { points: response.data, origin: response.meta?.origin ?? null, nextCursor: null };
   },
 
   async getById(id: string, signal?: AbortSignal): Promise<CollectionPoint> {

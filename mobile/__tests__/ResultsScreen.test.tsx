@@ -51,7 +51,7 @@ describe('Results', () => {
   it('lists the results with name, address, materials and distance', async () => {
     jest
       .spyOn(collectionPointsApi, 'searchByMaterial')
-      .mockResolvedValue({ points: [point], origin: null });
+      .mockResolvedValue({ points: [point], origin: null, nextCursor: null });
 
     const view = await renderWithProviders(<ResultsScreen />);
 
@@ -65,7 +65,7 @@ describe('Results', () => {
   it('opens the details of a result', async () => {
     jest
       .spyOn(collectionPointsApi, 'searchByMaterial')
-      .mockResolvedValue({ points: [point], origin: null });
+      .mockResolvedValue({ points: [point], origin: null, nextCursor: null });
 
     const view = await renderWithProviders(<ResultsScreen />);
 
@@ -80,7 +80,7 @@ describe('Results', () => {
   it('switches between list and map over the same results', async () => {
     jest
       .spyOn(collectionPointsApi, 'searchByMaterial')
-      .mockResolvedValue({ points: [point], origin: null });
+      .mockResolvedValue({ points: [point], origin: null, nextCursor: null });
 
     const view = await renderWithProviders(<ResultsScreen />);
     await view.findByText('Ecoponto Centro');
@@ -98,7 +98,7 @@ describe('Results', () => {
   it('shows an empty state that invites a contribution', async () => {
     jest
       .spyOn(collectionPointsApi, 'searchByMaterial')
-      .mockResolvedValue({ points: [], origin: null });
+      .mockResolvedValue({ points: [], origin: null, nextCursor: null });
 
     const view = await renderWithProviders(<ResultsScreen />);
 
@@ -125,7 +125,7 @@ describe('Results', () => {
     const search = jest
       .spyOn(collectionPointsApi, 'searchByMaterial')
       .mockRejectedValueOnce(new ApiError('VALIDATION_ERROR', 'Requisição inválida.', 400))
-      .mockResolvedValueOnce({ points: [point], origin: null });
+      .mockResolvedValueOnce({ points: [point], origin: null, nextCursor: null });
 
     const view = await renderWithProviders(<ResultsScreen />);
 
@@ -136,5 +136,145 @@ describe('Results', () => {
 
     expect(await view.findByText('Ecoponto Centro')).toBeVisible();
     expect(search).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Results pagination', () => {
+  function pointNamed(id: string, name: string): CollectionPoint {
+    return { ...point, id, name };
+  }
+
+  beforeEach(() => {
+    mockPush.mockClear();
+    jest.restoreAllMocks();
+    mockParams = { mode: 'material', query: 'Pilhas' };
+  });
+
+  it('loads the next page when the list reaches its end', async () => {
+    const search = jest
+      .spyOn(collectionPointsApi, 'searchByMaterial')
+      .mockResolvedValueOnce({
+        points: [pointNamed('point-1', 'Ecoponto Centro')],
+        origin: null,
+        nextCursor: 'cursor-page-2',
+      })
+      .mockResolvedValueOnce({
+        points: [pointNamed('point-2', 'Ecoponto Zona Norte')],
+        origin: null,
+        nextCursor: null,
+      });
+
+    const view = await renderWithProviders(<ResultsScreen />);
+
+    expect(await view.findByText('Ecoponto Centro')).toBeVisible();
+    expect(view.getByText('1 ponto encontrado')).toBeVisible();
+    expect(search).toHaveBeenCalledTimes(1);
+
+    await fireEvent(view.getByTestId('results-list'), 'endReached');
+
+    expect(await view.findByText('Ecoponto Zona Norte')).toBeVisible();
+    // Both pages are on screen, counted together.
+    expect(view.getByText('Ecoponto Centro')).toBeVisible();
+    expect(view.getByText('2 pontos encontrados')).toBeVisible();
+
+    expect(search).toHaveBeenCalledTimes(2);
+    expect(search).toHaveBeenLastCalledWith('Pilhas', 'cursor-page-2', expect.anything());
+  });
+
+  it('stops asking once the server reports no further page', async () => {
+    const search = jest.spyOn(collectionPointsApi, 'searchByMaterial').mockResolvedValue({
+      points: [pointNamed('point-1', 'Ecoponto Centro')],
+      origin: null,
+      nextCursor: null,
+    });
+
+    const view = await renderWithProviders(<ResultsScreen />);
+    await view.findByText('Ecoponto Centro');
+
+    await fireEvent(view.getByTestId('results-list'), 'endReached');
+    await fireEvent(view.getByTestId('results-list'), 'endReached');
+
+    expect(search).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the footer indicator while the next page is in flight', async () => {
+    let releaseSecondPage: (() => void) | undefined;
+
+    jest
+      .spyOn(collectionPointsApi, 'searchByMaterial')
+      .mockResolvedValueOnce({
+        points: [pointNamed('point-1', 'Ecoponto Centro')],
+        origin: null,
+        nextCursor: 'cursor-page-2',
+      })
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseSecondPage = () =>
+              resolve({
+                points: [pointNamed('point-2', 'Ecoponto Zona Norte')],
+                origin: null,
+                nextCursor: null,
+              });
+          }),
+      );
+
+    const view = await renderWithProviders(<ResultsScreen />);
+    await view.findByText('Ecoponto Centro');
+
+    await fireEvent(view.getByTestId('results-list'), 'endReached');
+
+    // The default LoadingState label, sitting under the loaded rows.
+    expect(await view.findByText('Carregando...')).toBeVisible();
+    expect(view.getByText('Ecoponto Centro')).toBeVisible();
+
+    releaseSecondPage?.();
+
+    expect(await view.findByText('Ecoponto Zona Norte')).toBeVisible();
+    await waitFor(() => expect(view.queryByText('Carregando...')).toBeNull());
+  });
+
+  it('keeps the map on the pages already loaded, without asking for more', async () => {
+    const search = jest
+      .spyOn(collectionPointsApi, 'searchByMaterial')
+      .mockResolvedValueOnce({
+        points: [pointNamed('point-1', 'Ecoponto Centro')],
+        origin: null,
+        nextCursor: 'cursor-page-2',
+      })
+      .mockResolvedValueOnce({
+        points: [pointNamed('point-2', 'Ecoponto Zona Norte')],
+        origin: null,
+        nextCursor: null,
+      });
+
+    const view = await renderWithProviders(<ResultsScreen />);
+    await view.findByText('Ecoponto Centro');
+
+    await fireEvent(view.getByTestId('results-list'), 'endReached');
+    await view.findByText('Ecoponto Zona Norte');
+
+    await fireEvent.press(view.getByTestId('view-mode-map'));
+
+    expect(await view.findByLabelText('Mapa com 2 ponto(s) de coleta')).toBeVisible();
+    // Switching to the map must not fetch anything by itself.
+    expect(search).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not paginate the address search', async () => {
+    mockParams = { mode: 'address', query: 'Rua Pará, 500' };
+    const search = jest.spyOn(collectionPointsApi, 'searchByAddress').mockResolvedValue({
+      points: [pointNamed('point-1', 'Ecoponto Centro')],
+      origin: null,
+      nextCursor: null,
+    });
+
+    const view = await renderWithProviders(<ResultsScreen />);
+    await view.findByText('Ecoponto Centro');
+
+    await fireEvent(view.getByTestId('results-list'), 'endReached');
+
+    expect(search).toHaveBeenCalledTimes(1);
+    expect(search).toHaveBeenCalledWith('Rua Pará, 500', expect.anything());
   });
 });

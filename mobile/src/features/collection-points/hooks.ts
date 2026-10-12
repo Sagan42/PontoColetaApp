@@ -1,6 +1,18 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import { ApiError } from '../../services/apiClient';
-import { collectionPointsApi, type CreateCollectionPointPayload } from './api';
+import {
+  collectionPointsApi,
+  type CollectionPointsResult,
+  type CreateCollectionPointPayload,
+} from './api';
+
+/** A 4xx will not get better by asking again; anything else gets two tries. */
+function retryUnlessClientError(failureCount: number, error: unknown): boolean {
+  return error instanceof ApiError && error.status >= 400 && error.status < 500
+    ? false
+    : failureCount < 2;
+}
 
 export const collectionPointKeys = {
   all: ['collection-points'] as const,
@@ -13,28 +25,57 @@ export const collectionPointKeys = {
 
 export type SearchMode = 'address' | 'material' | 'all';
 
+/**
+ * Material searches and the full listing walk `meta.nextCursor` page by page.
+ * Address search does not: nearby ranks by distance over the covering cells and
+ * answers in one shot, so it stays an ordinary query.
+ */
 export function useCollectionPointSearch(mode: SearchMode, query: string) {
   const trimmed = query.trim();
-  const enabled = mode === 'all' || trimmed.length > 0;
+  const paged = mode !== 'address';
 
-  return useQuery({
+  const pages = useInfiniteQuery({
     queryKey:
+      mode === 'material' ? collectionPointKeys.byMaterial(trimmed) : collectionPointKeys.list(),
+    enabled: paged && (mode === 'all' || trimmed.length > 0),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }) =>
       mode === 'material'
-        ? collectionPointKeys.byMaterial(trimmed)
-        : mode === 'address'
-          ? collectionPointKeys.byAddress(trimmed)
-          : collectionPointKeys.list(),
-    enabled,
-    queryFn: ({ signal }) => {
-      if (mode === 'material') return collectionPointsApi.searchByMaterial(trimmed, signal);
-      if (mode === 'address') return collectionPointsApi.searchByAddress(trimmed, signal);
-      return collectionPointsApi.listAll(signal);
-    },
-    retry: (failureCount, error) =>
-      error instanceof ApiError && error.status >= 400 && error.status < 500
-        ? false
-        : failureCount < 2,
+        ? collectionPointsApi.searchByMaterial(trimmed, pageParam, signal)
+        : collectionPointsApi.listAll(pageParam, signal),
+    getNextPageParam: (lastPage: CollectionPointsResult) => lastPage.nextCursor,
+    retry: retryUnlessClientError,
   });
+
+  const nearby = useQuery({
+    queryKey: collectionPointKeys.byAddress(trimmed),
+    enabled: !paged && trimmed.length > 0,
+    queryFn: ({ signal }) => collectionPointsApi.searchByAddress(trimmed, signal),
+    retry: retryUnlessClientError,
+  });
+
+  const active = paged ? pages : nearby;
+
+  const data = useMemo(() => {
+    if (!paged) return nearby.data;
+    if (!pages.data) return undefined;
+
+    return {
+      points: pages.data.pages.flatMap((page) => page.points),
+      origin: null,
+    };
+  }, [paged, nearby.data, pages.data]);
+
+  return {
+    data,
+    isPending: active.isPending,
+    isError: active.isError,
+    error: active.error,
+    refetch: active.refetch,
+    hasNextPage: paged && pages.hasNextPage,
+    isFetchingNextPage: paged && pages.isFetchingNextPage,
+    fetchNextPage: pages.fetchNextPage,
+  };
 }
 
 export function useCollectionPoint(id: string) {

@@ -27,6 +27,13 @@ export interface NearbyQuery {
 export interface CollectionPointRepository {
   save(point: CollectionPoint): Promise<void>;
 
+  /**
+   * Persists a change to a point that already exists, keeping its auxiliary
+   * items in step. Unlike `save`, it claims no uniqueness: the point already
+   * holds its claim, so re-claiming it would conflict with itself.
+   */
+  update(point: CollectionPoint): Promise<void>;
+
   findById(id: string): Promise<CollectionPoint | null>;
 
   listPublished(request: PageRequest): Promise<Page<CollectionPoint>>;

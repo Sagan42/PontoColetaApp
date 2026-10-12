@@ -102,6 +102,14 @@ export class InMemoryCollectionPointRepository implements CollectionPointReposit
     return Promise.resolve();
   }
 
+  readonly updated: string[] = [];
+
+  update(point: CollectionPoint): Promise<void> {
+    this.updated.push(point.id);
+    this.points.set(point.id, point);
+    return Promise.resolve();
+  }
+
   findById(id: string): Promise<CollectionPoint | null> {
     return Promise.resolve(this.points.get(id) ?? null);
   }

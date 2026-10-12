@@ -410,6 +410,62 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /v1/admin/collection-points/{id}/hide:
+    post:
+      tags: [Administração]
+      summary: Tira um ponto de coleta do ar
+      description: |
+        Marca o ponto como `HIDDEN`: ele sai da listagem, da busca por material,
+        da busca por proximidade e passa a responder 404 em
+        `GET /v1/collection-points/{id}`. O item continua na tabela.
+
+        Idempotente: ocultar um ponto já oculto responde 200 sem alterar
+        `updatedAt`. Ao contrário das rotas públicas, um ponto oculto **não**
+        responde 404 aqui.
+
+        Ocultar não libera o nome para novo cadastro: a garantia de unicidade
+        continua valendo e um recadastro do mesmo lugar responde 409.
+      operationId: hideCollectionPoint
+      security:
+        - adminJwt: []
+      parameters:
+        - $ref: '#/components/parameters/CollectionPointId'
+      responses:
+        '200':
+          $ref: '#/components/responses/ModeratedCollectionPoint'
+        '401':
+          $ref: '#/components/responses/AdminUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminForbidden'
+        '404':
+          $ref: '#/components/responses/CollectionPointNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/admin/collection-points/{id}/publish:
+    post:
+      tags: [Administração]
+      summary: Devolve um ponto de coleta ao ar
+      description: |
+        Marca o ponto como `PUBLISHED`, recriando os atributos do índice
+        esparso de proximidade. Idempotente da mesma forma que `/hide`.
+      operationId: publishCollectionPoint
+      security:
+        - adminJwt: []
+      parameters:
+        - $ref: '#/components/parameters/CollectionPointId'
+      responses:
+        '200':
+          $ref: '#/components/responses/ModeratedCollectionPoint'
+        '401':
+          $ref: '#/components/responses/AdminUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminForbidden'
+        '404':
+          $ref: '#/components/responses/CollectionPointNotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     adminJwt:
@@ -607,7 +663,53 @@ components:
           type: string
           description: Mesmo identificador registrado no CloudWatch.
 
+  parameters:
+    CollectionPointId:
+      name: id
+      in: path
+      required: true
+      description: Identificador do ponto de coleta.
+      schema:
+        type: string
+
   responses:
+    ModeratedCollectionPoint:
+      description: Ponto de coleta atualizado
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [data]
+            properties:
+              data:
+                $ref: '#/components/schemas/CollectionPoint'
+
+    AdminUnauthorized:
+      description: Token ausente ou inválido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    AdminForbidden:
+      description: Token válido, porém sem identidade utilizável
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+    CollectionPointNotFound:
+      description: Ponto de coleta inexistente
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            error:
+              code: NOT_FOUND
+              message: Ponto de coleta não encontrado.
+            requestId: 8f1c0f6e-1f8f-4f2f-9a1e-1f2c3d4e5f60
+
     BadRequest:
       description: Requisição inválida
       content:

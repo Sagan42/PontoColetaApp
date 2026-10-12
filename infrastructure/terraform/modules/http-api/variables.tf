@@ -46,7 +46,11 @@ variable "public_routes" {
 variable "admin_routes" {
   description = "Route keys that require a valid administrator token."
   type        = list(string)
-  default     = ["GET /v1/admin/metrics"]
+  default = [
+    "GET /v1/admin/metrics",
+    "POST /v1/admin/collection-points/{id}/hide",
+    "POST /v1/admin/collection-points/{id}/publish",
+  ]
 }
 
 variable "admin_jwt_issuer" {

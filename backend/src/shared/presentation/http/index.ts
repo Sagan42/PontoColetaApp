@@ -1,3 +1,4 @@
+export * from './admin-guard.js';
 export * from './api-gateway-adapter.js';
 export * from './error-mapper.js';
 export * from './http-types.js';

@@ -73,7 +73,15 @@ module "admin_lambda" {
   log_retention_days    = var.log_retention_days
   environment_variables = local.common_environment_variables
 
-  dynamodb_actions   = ["dynamodb:Query"]
+  # Query reads the metrics; GetItem and TransactWriteItems are what taking a
+  # point off the air needs — read it, then rewrite it with its material links.
+  # No PutItem or DeleteItem: the administrative API never creates or destroys.
+  dynamodb_actions = [
+    "dynamodb:Query",
+    "dynamodb:GetItem",
+    "dynamodb:TransactWriteItems",
+  ]
+
   dynamodb_resources = [module.dynamodb.table_arn]
 
   tags = local.tags

@@ -755,3 +755,103 @@ function claimKeyOf(command: { input: Record<string, unknown> } | undefined): st
     (items ?? []).map((entry) => entry.Put.Item.SK).find((sk) => sk.startsWith('UNIQUE#')) ?? ''
   );
 }
+
+describe('DynamoCollectionPointRepository update', () => {
+  function putsOf(command: { input: Record<string, unknown> } | undefined) {
+    return (command?.input.TransactItems ?? []) as {
+      Put: { Item: Record<string, unknown>; ConditionExpression?: string };
+    }[];
+  }
+
+  function hiddenPoint(id: string): CollectionPoint {
+    const point = buildPoint(id);
+    point.hide(now);
+    return point;
+  }
+
+  it('rewrites the point and its material links in one transaction', async () => {
+    const { client, sent } = stubClient();
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    await repository.update(buildPoint('point-1'));
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]?.name).toBe('TransactWriteCommand');
+    expect(putsOf(sent[0]).map((entry) => entry.Put.Item.SK)).toEqual([
+      'POINT#point-1',
+      'MATERIAL#pilhas#POINT#point-1',
+    ]);
+  });
+
+  it('refuses to create a point that is not there', async () => {
+    const { client, sent } = stubClient();
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    await repository.update(buildPoint('point-1'));
+
+    expect(putsOf(sent[0])[0]?.Put.ConditionExpression).toBe('attribute_exists(PK)');
+  });
+
+  it('leaves the uniqueness claim untouched, since the point already holds it', async () => {
+    const { client, sent } = stubClient();
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    await repository.update(buildPoint('point-1'));
+
+    const keys = putsOf(sent[0]).map((entry) => String(entry.Put.Item.SK));
+    expect(keys.some((key) => key.startsWith('UNIQUE#'))).toBe(false);
+  });
+
+  it('strips the geo index attributes when the point is hidden', async () => {
+    const { client, sent } = stubClient();
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    await repository.update(hiddenPoint('point-1'));
+
+    const item = putsOf(sent[0])[0]?.Put.Item;
+    expect(item?.status).toBe('HIDDEN');
+    expect(item).not.toHaveProperty('GSI2PK');
+    expect(item).not.toHaveProperty('GSI2SK');
+    // The status index still carries it, so an administrator can list it.
+    expect(item?.GSI1PK).toBe('STATUS#HIDDEN');
+  });
+
+  it('restores the geo index attributes when the point is published again', async () => {
+    const point = hiddenPoint('point-1');
+    point.publish(now);
+
+    const { client, sent } = stubClient();
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    await repository.update(point);
+
+    const item = putsOf(sent[0])[0]?.Put.Item;
+    expect(item?.status).toBe('PUBLISHED');
+    expect(item?.GSI2PK).toBe('GEO#6gge');
+    expect(item?.GSI2SK).toBe('POINT#point-1');
+    expect(item?.GSI1PK).toBe('STATUS#PUBLISHED');
+  });
+
+  it('keeps the material links intact across a hide', async () => {
+    const { client, sent } = stubClient();
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    await repository.update(hiddenPoint('point-1'));
+
+    const link = putsOf(sent[0])[1]?.Put.Item;
+    expect(link?.SK).toBe('MATERIAL#pilhas#POINT#point-1');
+    expect(link?.pointId).toBe('point-1');
+  });
+
+  it('lets a failure through instead of reading it as a duplicate', async () => {
+    const boom = new Error('socket hang up');
+    const send = vi.fn(() => Promise.reject(boom));
+    const repository = new DynamoCollectionPointRepository(
+      { send } as unknown as DynamoDBDocumentClient,
+      TABLE,
+      silentLogger,
+    );
+
+    await expect(repository.update(buildPoint('point-1'))).rejects.toBe(boom);
+  });
+});

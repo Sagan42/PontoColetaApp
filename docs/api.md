@@ -44,6 +44,8 @@ Stack traces nunca são expostos.
 | POST   | `/v1/collection-points`        | pública      | cadastro                                       |
 | POST   | `/v1/metrics/events`           | pública      | registra `app_open` ou `point_viewed`          |
 | GET    | `/v1/admin/metrics`            | **JWT**      | métricas agregadas                             |
+| POST   | `/v1/admin/collection-points/{id}/hide`    | **JWT** | tira o ponto do ar                     |
+| POST   | `/v1/admin/collection-points/{id}/publish` | **JWT** | devolve o ponto ao ar                  |
 
 ## Códigos de status
 
@@ -173,6 +175,46 @@ authorization: Bearer <IdToken do Cognito>
 
 A série `daily` é contínua: dias sem atividade vêm com zeros, para o gráfico não
 mentir sobre a evolução.
+
+### Ciclo de vida do ponto (moderação)
+
+Como tirar do ar um ponto errado ou abusivo sem editar a tabela à mão.
+
+```http
+POST /v1/admin/collection-points/0f2c…/hide
+authorization: Bearer <IdToken do Cognito>
+```
+
+```json
+{
+  "data": {
+    "id": "0f2c…",
+    "name": "Ecoponto Centro",
+    "status": "HIDDEN",
+    "updatedAt": "2026-10-12T09:30:00.000Z"
+  }
+}
+```
+
+`/publish` tem a mesma forma e devolve `status: "PUBLISHED"`.
+
+Comportamento:
+
+- A resposta é o ponto atualizado, no mesmo formato das rotas públicas.
+- **Idempotente.** Ocultar um ponto já oculto responde 200 sem mudar nada, e
+  `updatedAt` fica como estava — repetir a chamada não falsifica o histórico.
+- **404** para id inexistente. Diferente das rotas públicas, um ponto **oculto
+  não** dá 404 aqui: é justamente ele que `/publish` precisa alcançar.
+- Oculto sai na hora de `GET /v1/collection-points`, da busca por material, da
+  busca por proximidade e de `GET /v1/collection-points/{id}` (que passa a
+  responder 404). O ponto continua na tabela e no `GSI1-status`.
+- Quem executou a ação vai para o log como `collection_point.hidden` /
+  `collection_point.published`, com `pointId` e `actor` (o `sub` do token). O
+  ponto em si só registra que está oculto, não por quem.
+
+Ocultar **não** libera o nome: a claim de unicidade continua valendo, então
+recadastrar o mesmo lugar ainda responde 409. Ver
+[dynamodb.md](dynamodb.md#3-item-de-unicidade).
 
 ## Validação
 

@@ -64,7 +64,7 @@ HTTP, Terraform, Expo nem React Native.
 | Camada             | Responsabilidade                                          | Exemplos                                                                 |
 | ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------ |
 | **Domain**         | Conceitos e regras que existiriam sem computador           | `CollectionPoint`, `Material`, `Coordinates`, `SERVICE_AREA`, Haversine   |
-| **Application**    | Orquestração de um caso de uso, dependendo só de abstrações| `CreateCollectionPoint`, `SearchCollectionPointsByLocation`               |
+| **Application**    | Orquestração de um caso de uso, dependendo só de abstrações| `CreateCollectionPoint`, `SearchCollectionPointsByLocation`, `HideCollectionPoint` |
 | **Infrastructure** | Implementações concretas                                   | `DynamoCollectionPointRepository`, `NominatimGeocodingService`, logger    |
 | **Presentation**   | Contrato HTTP, validação estrutural, códigos de status     | `collection-point-routes.ts`, `error-mapper.ts`, `Router`                 |
 
@@ -98,11 +98,45 @@ Duas funções ([ADR-005](decisions/ADR-005-http-api-e-duas-lambdas.md)):
 | Função       | Memória | Timeout | Permissões DynamoDB                              |
 | ------------ | ------- | ------- | ------------------------------------------------ |
 | `public-api` | 512 MB  | 15 s    | GetItem, BatchGetItem, Query, PutItem, UpdateItem |
-| `admin-api`  | 256 MB  | 10 s    | Query                                            |
+| `admin-api`  | 256 MB  | 10 s    | Query, GetItem, TransactWriteItems               |
 
 Ambas em `arm64` (Graviton, ~20% mais barato) e runtime `nodejs22.x`. O
 container é construído uma vez por container (fora do handler), então clientes
 HTTP e DynamoDB são reaproveitados entre invocações.
+
+A `admin-api` lê métricas (`Query`) e modera pontos: `GetItem` para carregar o
+ponto e `TransactWriteItems` para reescrevê-lo com seus itens de material. Sem
+`PutItem` e sem `DeleteItem` — a API administrativa nunca cria nem destrói
+ponto, só muda o estado de um que já existe.
+
+## Ciclo de vida do ponto de coleta
+
+```mermaid
+stateDiagram-v2
+    [*] --> PUBLISHED: POST /v1/collection-points
+    PUBLISHED --> HIDDEN: POST /v1/admin/…/hide
+    HIDDEN --> PUBLISHED: POST /v1/admin/…/publish
+```
+
+Um ponto nasce publicado — o cadastro é aberto e não há fila de aprovação. A
+moderação é **reativa**: tirar do ar o que estiver errado ou abusivo.
+
+`HIDDEN` é a razão de existir do `GSI2` esparso. Os atributos `GSI2PK`/`GSI2SK`
+só são gravados para ponto publicado, então a busca por proximidade não precisa
+filtrar status — o índice simplesmente não contém o que está oculto. O ponto
+permanece no `GSI1-status`, que é como um administrador consegue listar os
+ocultos.
+
+A transição é um caso de uso de aplicação (`HideCollectionPoint`,
+`PublishCollectionPoint`) sobre os métodos de domínio `hide()`/`publish()`, que
+são idempotentes. A persistência usa `update` no repositório, e não `save`:
+`save` grava a claim de unicidade sob `attribute_not_exists` e entraria em
+conflito consigo mesma num ponto que já existe. `update` reescreve o item
+inteiro, então os atributos do índice esparso desaparecem e reaparecem sem
+precisar de `REMOVE`.
+
+Não há tela para isso: por enquanto a moderação é feita por chamada HTTP
+autenticada.
 
 ## Mobile
 

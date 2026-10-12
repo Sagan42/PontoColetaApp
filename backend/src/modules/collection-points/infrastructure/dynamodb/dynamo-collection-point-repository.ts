@@ -118,6 +118,36 @@ export class DynamoCollectionPointRepository implements CollectionPointRepositor
     }
   }
 
+  /**
+   * Rewrites the point and its material links in one transaction. The item is
+   * replaced wholesale, so the sparse GSI2 attributes come back for a published
+   * point and simply are not there for a hidden one — no attribute surgery
+   * needed. The uniqueness claim is left alone: it already belongs to this
+   * point, and re-putting it under attribute_not_exists would fail.
+   *
+   * It assumes the materials did not change. An edit endpoint that can drop a
+   * material would also have to delete the link items left behind.
+   */
+  async update(point: CollectionPoint): Promise<void> {
+    const item = toItem(point);
+    const links = toMaterialLinkItems(point);
+
+    await this.client.send(
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Put: {
+              TableName: this.tableName,
+              Item: item,
+              ConditionExpression: 'attribute_exists(PK)',
+            },
+          },
+          ...links.map((link) => ({ Put: { TableName: this.tableName, Item: link } })),
+        ],
+      }),
+    );
+  }
+
   async findById(id: string): Promise<CollectionPoint | null> {
     const result = await this.client.send(
       new GetCommand({

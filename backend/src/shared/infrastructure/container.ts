@@ -1,11 +1,14 @@
 import { CreateCollectionPoint } from '../../modules/collection-points/application/use-cases/create-collection-point.js';
 import { GetCollectionPoint } from '../../modules/collection-points/application/use-cases/get-collection-point.js';
+import { HideCollectionPoint } from '../../modules/collection-points/application/use-cases/hide-collection-point.js';
 import { ListCollectionPoints } from '../../modules/collection-points/application/use-cases/list-collection-points.js';
+import { PublishCollectionPoint } from '../../modules/collection-points/application/use-cases/publish-collection-point.js';
 import { SearchCollectionPointsByLocation } from '../../modules/collection-points/application/use-cases/search-collection-points-by-location.js';
 import { SearchCollectionPointsByMaterial } from '../../modules/collection-points/application/use-cases/search-collection-points-by-material.js';
 import { DynamoCollectionPointRepository } from '../../modules/collection-points/infrastructure/dynamodb/dynamo-collection-point-repository.js';
 import { NominatimGeocodingService } from '../../modules/collection-points/infrastructure/geocoding/nominatim-geocoding-service.js';
 import { UsageMetricRecorderAdapter } from '../../modules/collection-points/infrastructure/metrics/usage-metric-recorder-adapter.js';
+import type { AdminCollectionPointUseCases } from '../../modules/collection-points/presentation/admin-collection-point-routes.js';
 import type { CollectionPointUseCases } from '../../modules/collection-points/presentation/collection-point-routes.js';
 import { GetUsageMetrics } from '../../modules/metrics/application/use-cases/get-usage-metrics.js';
 import { RegisterUsageMetric } from '../../modules/metrics/application/use-cases/register-usage-metric.js';
@@ -19,6 +22,7 @@ export interface Container {
   readonly environment: Environment;
   readonly logger: Logger;
   readonly collectionPoints: CollectionPointUseCases;
+  readonly adminCollectionPoints: AdminCollectionPointUseCases;
   readonly registerUsageMetric: RegisterUsageMetric;
   readonly getUsageMetrics: GetUsageMetrics;
 }
@@ -73,6 +77,10 @@ export function createContainer(environment: Environment = loadEnvironment()): C
         metricRecorder,
         logger,
       ),
+    },
+    adminCollectionPoints: {
+      hideCollectionPoint: new HideCollectionPoint(collectionPointRepository, systemClock),
+      publishCollectionPoint: new PublishCollectionPoint(collectionPointRepository, systemClock),
     },
     registerUsageMetric,
     getUsageMetrics: new GetUsageMetrics(metricsRepository, systemClock),

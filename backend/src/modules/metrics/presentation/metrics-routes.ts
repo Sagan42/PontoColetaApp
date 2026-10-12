@@ -1,7 +1,7 @@
 import type { Router } from '../../../shared/presentation/http/index.js';
 import {
-  HttpAuthorizationError,
   accepted,
+  assertAdmin,
   ok,
   parseJsonBody,
 } from '../../../shared/presentation/http/index.js';
@@ -34,13 +34,4 @@ export function registerAdminMetricsRoutes(router: Router, getUsageMetrics: GetU
 
     return ok(report);
   });
-}
-
-function assertAdmin(claims: Readonly<Record<string, unknown>> | null): void {
-  if (!claims) {
-    throw new HttpAuthorizationError(401, 'UNAUTHORIZED', 'Autenticação necessária.');
-  }
-  if (typeof claims.sub !== 'string' || claims.sub.length === 0) {
-    throw new HttpAuthorizationError(403, 'FORBIDDEN', 'Acesso não autorizado.');
-  }
 }

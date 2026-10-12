@@ -247,3 +247,105 @@ describe('admin API', () => {
     expect(response.statusCode).toBe(400);
   });
 });
+
+describe('admin collection point lifecycle API', () => {
+  let api: TestApi;
+  const admin = { sub: 'admin-1' };
+
+  async function createPoint(): Promise<string> {
+    const response = await api.request('POST', '/v1/collection-points', {
+      body: {
+        name: 'Ecoponto Centro',
+        address: 'Rua Pará, 500',
+        materials: ['Pilhas'],
+      },
+    });
+
+    return (response.body.data as { id: string }).id;
+  }
+
+  beforeEach(() => {
+    api = buildTestApi();
+  });
+
+  it('rejects hiding without a token', async () => {
+    const id = await createPoint();
+
+    const response = await api.request('POST', `/v1/admin/collection-points/${id}/hide`);
+
+    expect(response.statusCode).toBe(401);
+    expect(response.body.error?.code).toBe('UNAUTHORIZED');
+  });
+
+  it('rejects publishing with a token that has no subject', async () => {
+    const id = await createPoint();
+
+    const response = await api.request('POST', `/v1/admin/collection-points/${id}/publish`, {
+      claims: {},
+    });
+
+    expect(response.statusCode).toBe(403);
+    expect(response.body.error?.code).toBe('FORBIDDEN');
+  });
+
+  it('hides a point and answers with the updated point', async () => {
+    const id = await createPoint();
+
+    const response = await api.request('POST', `/v1/admin/collection-points/${id}/hide`, {
+      claims: admin,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data).toMatchObject({ id, status: 'HIDDEN' });
+  });
+
+  it('takes the hidden point out of the public API', async () => {
+    const id = await createPoint();
+    expect((await api.request('GET', `/v1/collection-points/${id}`)).statusCode).toBe(200);
+
+    await api.request('POST', `/v1/admin/collection-points/${id}/hide`, { claims: admin });
+
+    expect((await api.request('GET', `/v1/collection-points/${id}`)).statusCode).toBe(404);
+    const listed = await api.request('GET', '/v1/collection-points');
+    expect(listed.body.data).toEqual([]);
+  });
+
+  it('puts the point back with publish', async () => {
+    const id = await createPoint();
+    await api.request('POST', `/v1/admin/collection-points/${id}/hide`, { claims: admin });
+
+    const response = await api.request('POST', `/v1/admin/collection-points/${id}/publish`, {
+      claims: admin,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body.data).toMatchObject({ id, status: 'PUBLISHED' });
+    expect((await api.request('GET', `/v1/collection-points/${id}`)).statusCode).toBe(200);
+  });
+
+  it('answers 404 for a point that does not exist', async () => {
+    const response = await api.request('POST', '/v1/admin/collection-points/missing/hide', {
+      claims: admin,
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.body.error?.code).toBe('NOT_FOUND');
+  });
+
+  it('records who moderated the point', async () => {
+    const id = await createPoint();
+
+    await api.request('POST', `/v1/admin/collection-points/${id}/hide`, { claims: admin });
+
+    const audit = api.logs.find((entry) => entry.message === 'collection_point.hidden');
+    expect(audit?.context).toMatchObject({ pointId: id, actor: 'admin-1' });
+  });
+
+  it('refuses a method the route does not have', async () => {
+    const id = await createPoint();
+
+    const response = await api.request('GET', `/v1/admin/collection-points/${id}/hide`);
+
+    expect(response.statusCode).toBe(405);
+  });
+});

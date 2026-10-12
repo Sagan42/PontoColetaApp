@@ -32,6 +32,7 @@ export function createContainer(environment: Environment = loadEnvironment()): C
   const collectionPointRepository = new DynamoCollectionPointRepository(
     documentClient,
     environment.TABLE_NAME,
+    logger,
   );
   const metricsRepository = new DynamoMetricsRepository(documentClient, environment.TABLE_NAME);
 

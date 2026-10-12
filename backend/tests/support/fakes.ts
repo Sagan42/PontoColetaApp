@@ -1,4 +1,9 @@
-import type { Clock, IdGenerator, Logger } from '../../src/shared/application/ports/index.js';
+import type {
+  Clock,
+  IdGenerator,
+  LogContext,
+  Logger,
+} from '../../src/shared/application/ports/index.js';
 import type { CollectionPoint } from '../../src/modules/collection-points/domain/collection-point.js';
 import type { CollectionPointStatus } from '../../src/modules/collection-points/domain/collection-point-status.js';
 import type {
@@ -50,6 +55,36 @@ export const silentLogger: Logger = {
   error: () => undefined,
   child: () => silentLogger,
 };
+
+export interface RecordedLog {
+  readonly message: string;
+  readonly context: LogContext | undefined;
+}
+
+export interface RecordingLogger {
+  readonly logger: Logger;
+  readonly warnings: RecordedLog[];
+  readonly errors: RecordedLog[];
+}
+
+export function createRecordingLogger(): RecordingLogger {
+  const warnings: RecordedLog[] = [];
+  const errors: RecordedLog[] = [];
+
+  const logger: Logger = {
+    debug: () => undefined,
+    info: () => undefined,
+    warn: (message, context) => {
+      warnings.push({ message, context });
+    },
+    error: (message, context) => {
+      errors.push({ message, context });
+    },
+    child: () => logger,
+  };
+
+  return { logger, warnings, errors };
+}
 
 export class InMemoryCollectionPointRepository implements CollectionPointRepository {
   readonly points = new Map<string, CollectionPoint>();

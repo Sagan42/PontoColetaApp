@@ -3,8 +3,10 @@ import {
   GetCommand,
   QueryCommand,
   TransactWriteCommand,
+  type BatchGetCommandOutput,
   type DynamoDBDocumentClient,
 } from '@aws-sdk/lib-dynamodb';
+import type { Logger } from '../../../../shared/application/ports/index.js';
 import { geohashCellsCovering } from '../../../../shared/domain/geo/index.js';
 import { decodeCursor, encodeCursor } from '../../../../shared/infrastructure/dynamodb/index.js';
 import type { CollectionPoint } from '../../domain/collection-point.js';
@@ -31,11 +33,25 @@ export const INDEX_NAMES = {
 } as const;
 
 const MAX_BATCH_GET_KEYS = 100;
+const MAX_BATCH_GET_ATTEMPTS = 5;
+const BATCH_GET_BASE_DELAY_MS = 50;
+
+type BatchGetKeys = NonNullable<
+  NonNullable<NonNullable<BatchGetCommandOutput['UnprocessedKeys']>[string]>['Keys']
+>;
+
+function waitMs(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
 
 export class DynamoCollectionPointRepository implements CollectionPointRepository {
   constructor(
     private readonly client: DynamoDBDocumentClient,
     private readonly tableName: string,
+    private readonly logger: Logger,
+    private readonly wait: (ms: number) => Promise<void> = waitMs,
   ) {}
 
   async save(point: CollectionPoint): Promise<void> {
@@ -150,27 +166,55 @@ export class DynamoCollectionPointRepository implements CollectionPointRepositor
   }
 
   private async batchGetPoints(ids: string[]): Promise<CollectionPoint[]> {
-    if (ids.length === 0) return [];
+    const uniqueIds = [...new Set(ids)];
+    if (uniqueIds.length === 0) return [];
 
-    const uniqueIds = [...new Set(ids)].slice(0, MAX_BATCH_GET_KEYS);
-    const result = await this.client.send(
-      new BatchGetCommand({
-        RequestItems: {
-          [this.tableName]: {
-            Keys: uniqueIds.map((id) => ({
-              PK: keys.cityPartition(),
-              SK: keys.pointSortKey(id),
-            })),
-          },
-        },
-      }),
-    );
+    const byId = new Map<string, CollectionPoint>();
 
-    const items = result.Responses?.[this.tableName] ?? [];
-    const byId = new Map(items.map((item) => [String(item.id), toDomain(item)]));
+    // A BatchGet takes at most 100 keys, so the excess goes in further batches
+    // rather than being dropped.
+    for (let start = 0; start < uniqueIds.length; start += MAX_BATCH_GET_KEYS) {
+      await this.collectBatch(uniqueIds.slice(start, start + MAX_BATCH_GET_KEYS), byId);
+    }
 
     return uniqueIds
       .map((id) => byId.get(id))
       .filter((point): point is CollectionPoint => point !== undefined);
+  }
+
+  /**
+   * DynamoDB answers a BatchGet partially when it throttles the request or when
+   * the batch would exceed 16 MB, handing the keys it skipped back in
+   * UnprocessedKeys. Resending those with exponential backoff is what keeps
+   * points from disappearing from a material search without a trace.
+   */
+  private async collectBatch(ids: string[], byId: Map<string, CollectionPoint>): Promise<void> {
+    let pending: BatchGetKeys = ids.map((id) => ({
+      PK: keys.cityPartition(),
+      SK: keys.pointSortKey(id),
+    }));
+
+    for (let attempt = 0; attempt < MAX_BATCH_GET_ATTEMPTS && pending.length > 0; attempt += 1) {
+      if (attempt > 0) await this.wait(BATCH_GET_BASE_DELAY_MS * 2 ** (attempt - 1));
+
+      const result = await this.client.send(
+        new BatchGetCommand({ RequestItems: { [this.tableName]: { Keys: pending } } }),
+      );
+
+      for (const item of result.Responses?.[this.tableName] ?? []) {
+        byId.set(String(item.id), toDomain(item));
+      }
+
+      pending = result.UnprocessedKeys?.[this.tableName]?.Keys ?? [];
+    }
+
+    if (pending.length > 0) {
+      this.logger.warn('BatchGet left keys unprocessed after exhausting the retries', {
+        operation: 'DynamoCollectionPointRepository.batchGetPoints',
+        table: this.tableName,
+        unprocessedKeys: pending.length,
+        attempts: MAX_BATCH_GET_ATTEMPTS,
+      });
+    }
   }
 }

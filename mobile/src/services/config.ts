@@ -28,5 +28,3 @@ export const config = {
     name: 'Londrina',
   },
 } as const;
-
-export const isAdminConfigured = (): boolean => config.admin.clientId.length > 0;

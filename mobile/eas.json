@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 12.0.0",
-    "appVersionSource": "local"
+    "appVersionSource": "remote"
   },
   "build": {
     "development": {
@@ -27,7 +27,7 @@
       "android": {
         "buildType": "app-bundle"
       },
-      "autoIncrement": "versionCode",
+      "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_ADS_ENABLED": "false"
       }

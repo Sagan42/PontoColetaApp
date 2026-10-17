@@ -21,12 +21,7 @@
       "blockedPermissions": [
         "android.permission.ACCESS_FINE_LOCATION",
         "android.permission.ACCESS_COARSE_LOCATION"
-      ],
-      "config": {
-        "googleMaps": {
-          "apiKey": "REPLACE_WITH_GOOGLE_MAPS_ANDROID_API_KEY"
-        }
-      }
+      ]
     },
     "plugins": [
       "expo-router",
@@ -45,10 +40,7 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "REPLACE_WITH_EAS_PROJECT_ID"
-      }
+      "router": {}
     }
   },
   "react-native-google-mobile-ads": {

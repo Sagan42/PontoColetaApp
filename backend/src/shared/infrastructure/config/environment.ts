@@ -2,7 +2,7 @@ import { z } from 'zod';
 
 const environmentSchema = z.object({
   ENVIRONMENT: z.enum(['dev', 'prod']).default('dev'),
-  AWS_REGION: z.string().min(1).default('us-east-1'),
+  AWS_REGION: z.string().min(1).default('sa-east-1'),
   TABLE_NAME: z.string().min(1),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
   GEOCODING_PROVIDER: z.enum(['nominatim']).default('nominatim'),

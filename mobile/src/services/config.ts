@@ -13,7 +13,7 @@ export const config = {
   apiTimeoutMs: Number(readString(process.env.EXPO_PUBLIC_API_TIMEOUT_MS, '12000')),
 
   admin: {
-    region: readString(process.env.EXPO_PUBLIC_COGNITO_REGION, 'us-east-1'),
+    region: readString(process.env.EXPO_PUBLIC_COGNITO_REGION, 'sa-east-1'),
     clientId: readString(process.env.EXPO_PUBLIC_COGNITO_CLIENT_ID, ''),
   },
 

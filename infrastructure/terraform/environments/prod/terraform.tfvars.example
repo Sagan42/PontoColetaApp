@@ -1,5 +1,5 @@
 # Copy to terraform.tfvars and adjust. Never commit terraform.tfvars.
-aws_region           = "us-east-1"
+aws_region           = "sa-east-1"
 geocoding_user_agent = "PontoColeta/1.0 (contato@seu-dominio.com)"
 
 # Obrigatorio: recebe o orcamento e os alarmes de abuso. Sem valor padrao.

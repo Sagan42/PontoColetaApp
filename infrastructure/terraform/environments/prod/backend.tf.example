@@ -11,7 +11,7 @@ terraform {
   backend "s3" {
     bucket       = "pontocoleta-tfstate-<account-id>"
     key          = "prod/terraform.tfstate"
-    region       = "us-east-1"
+    region       = "sa-east-1"
     encrypt      = true
     use_lockfile = true
   }

@@ -17,7 +17,7 @@ module "stack" {
   api_throttling_rate_limit  = 10
   api_throttling_burst_limit = 30
 
-  admin_mfa_configuration = "ON"
+  admin_mfa_configuration = "OPTIONAL"
 
   # TEMPORARIO, mesma razao de dev: o limite de concorrencia da conta e 5.
   # 20 + 2 exigiria limite de pelo menos 27. Pedir o aumento de cota para 1000

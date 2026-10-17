@@ -22,3 +22,8 @@ output "log_groups" {
   description = "Log groups of this environment."
   value       = module.stack.log_groups
 }
+
+output "cost_guardrails" {
+  description = "Orçamento, tópico de alerta e limiar de cada alarme de desenvolvimento."
+  value       = module.stack.cost_guardrails
+}

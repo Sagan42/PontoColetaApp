@@ -29,7 +29,7 @@
       },
       "autoIncrement": "versionCode",
       "env": {
-        "EXPO_PUBLIC_ADS_ENABLED": "true"
+        "EXPO_PUBLIC_ADS_ENABLED": "false"
       }
     }
   },

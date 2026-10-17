@@ -24,6 +24,15 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
+  # route_settings nomeia rotas por chave, e o API Gateway recusa o CreateStage
+  # se a rota ainda nao existe. Stage e rotas sao irmaos na arvore de
+  # dependencias, entao sem isto o Terraform cria o stage primeiro e falha com
+  # NotFoundException. As rotas nao dependem do stage, logo nao ha ciclo.
+  depends_on = [
+    aws_apigatewayv2_route.public,
+    aws_apigatewayv2_route.admin,
+  ]
+
   access_log_settings {
     destination_arn = aws_cloudwatch_log_group.access.arn
 

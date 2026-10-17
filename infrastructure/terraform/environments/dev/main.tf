@@ -17,10 +17,13 @@ module "stack" {
 
   admin_mfa_configuration = "OPTIONAL"
 
-  # Lower than prod on purpose. dev is for one person at a time, and a runaway
-  # loop here should hit a wall long before it shows up on the bill.
-  public_lambda_reserved_concurrency = 5
-  admin_lambda_reserved_concurrency  = 1
+  # TEMPORARIO: a conta e nova e seu limite de concorrencia e 5. A AWS exige
+  # deixar 5 nao reservados, entao reservar qualquer valor falha com
+  # InvalidParameterValueException. Enquanto isso, o proprio limite da conta e o
+  # teto -- bem mais apertado que a reserva. Depois do aumento de cota para
+  # 1000, volte para 5 e 1.
+  public_lambda_reserved_concurrency = -1
+  admin_lambda_reserved_concurrency  = -1
 
   table_max_read_request_units  = 100
   table_max_write_request_units = 10

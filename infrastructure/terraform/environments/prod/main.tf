@@ -19,8 +19,11 @@ module "stack" {
 
   admin_mfa_configuration = "ON"
 
-  public_lambda_reserved_concurrency = 20
-  admin_lambda_reserved_concurrency  = 2
+  # TEMPORARIO, mesma razao de dev: o limite de concorrencia da conta e 5.
+  # 20 + 2 exigiria limite de pelo menos 27. Pedir o aumento de cota para 1000
+  # e pre-requisito de prod; feito isso, volte para 20 e 2.
+  public_lambda_reserved_concurrency = -1
+  admin_lambda_reserved_concurrency  = -1
 
   monthly_budget_usd = 25
   cost_alert_email   = var.cost_alert_email

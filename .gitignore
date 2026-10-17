@@ -43,6 +43,14 @@ override.tf.json
 .terraform.lock.hcl.bak
 .terraform-build/
 
+# Arquivos de plano. Um .tfplan e um zip que embute o .tfstate inteiro -- com
+# numero da conta, e-mails e ids do Cognito -- entao vale a mesma regra do
+# state. Alem disso ele e amarrado ao serial do state: um plano versionado
+# falha com "Saved plan is stale".
+tfplan
+*.tfplan
+tfplan.*
+
 # Logs
 *.log
 npm-debug.log*

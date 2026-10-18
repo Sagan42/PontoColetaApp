@@ -33,8 +33,7 @@
           "resizeMode": "contain",
           "backgroundColor": "#F4F8F5"
         }
-      ],
-      "react-native-google-mobile-ads"
+      ]
     ],
     "experiments": {
       "typedRoutes": true
@@ -46,9 +45,5 @@
       }
     },
     "owner": "pedro.c.f"
-  },
-  "react-native-google-mobile-ads": {
-    "androidAppId": "ca-app-pub-3940256099942544~3347511713",
-    "userTrackingUsageDescription": "Este identificador será usado para exibir anúncios relevantes."
   }
 }

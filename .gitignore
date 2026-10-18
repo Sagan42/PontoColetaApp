@@ -15,6 +15,10 @@ coverage/
 *.jks
 *.keystore
 !debug.keystore
+
+# credentials.json do EAS. Pior que a keystore sozinha: traz a keystore em
+# base64 E as senhas em texto puro. Baixe so quando precisar e apague depois.
+credentials.json
 android/
 ios/
 *.aab

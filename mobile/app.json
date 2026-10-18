@@ -40,8 +40,12 @@
       "typedRoutes": true
     },
     "extra": {
-      "router": {}
-    }
+      "router": {},
+      "eas": {
+        "projectId": "6cbd1f3a-012e-4748-b0a1-44f98f305b64"
+      }
+    },
+    "owner": "pedro.c.f"
   },
   "react-native-google-mobile-ads": {
     "androidAppId": "ca-app-pub-3940256099942544~3347511713",

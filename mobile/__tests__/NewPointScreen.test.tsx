@@ -33,7 +33,9 @@ type View = Awaited<ReturnType<typeof renderWithProviders>>;
 
 async function fillValidForm(view: View) {
   await fireEvent.changeText(view.getByTestId('input-name'), 'Ecoponto Centro');
-  await fireEvent.changeText(view.getByTestId('input-point-address'), 'Rua Pará, 500');
+  await fireEvent.changeText(view.getByTestId('input-street'), 'Rua Pará');
+  await fireEvent.changeText(view.getByTestId('input-number'), '500');
+  await fireEvent.changeText(view.getByTestId('input-neighborhood'), 'Centro');
   await fireEvent.changeText(view.getByTestId('input-custom-material'), 'Pilhas');
   await fireEvent.press(view.getByTestId('button-add-material'));
 }
@@ -52,7 +54,9 @@ describe('New collection point', () => {
     await fireEvent.press(view.getByTestId('button-submit-point'));
 
     expect(await view.findByText('Informe um nome com pelo menos 3 caracteres.')).toBeVisible();
-    expect(view.getByText('Informe o endereço completo.')).toBeVisible();
+    expect(view.getByText('Informe a rua ou avenida.')).toBeVisible();
+    expect(view.getByText('Informe o número.')).toBeVisible();
+    expect(view.getByText('Informe o bairro.')).toBeVisible();
     expect(view.getByText('Selecione ou digite ao menos um material.')).toBeVisible();
     expect(create).not.toHaveBeenCalled();
   });
@@ -65,6 +69,15 @@ describe('New collection point', () => {
     await fireEvent.changeText(view.getByTestId('input-name'), 'Ecoponto Centro');
 
     expect(view.queryByText('Informe um nome com pelo menos 3 caracteres.')).toBeNull();
+  });
+
+  it('keeps anything that is not a digit out of the address number', async () => {
+    const view = await renderWithProviders(<NewCollectionPointScreen />);
+
+    const number = view.getByTestId('input-number');
+    await fireEvent.changeText(number, '50a0-');
+
+    expect(number.props.value).toBe('500');
   });
 
   it('lets a material be picked from the suggestions', async () => {
@@ -86,11 +99,44 @@ describe('New collection point', () => {
     expect(await view.findByText('Ponto cadastrado com sucesso')).toBeVisible();
     expect(create).toHaveBeenCalledWith({
       name: 'Ecoponto Centro',
-      address: 'Rua Pará, 500',
+      address: 'Rua Pará, 500 - Centro',
       materials: ['Pilhas'],
       openingHours: null,
       notes: null,
     });
+  });
+
+  it('sends the opening hours assembled from the days and the two times', async () => {
+    const create = jest.spyOn(collectionPointsApi, 'create').mockResolvedValue(created);
+
+    const view = await renderWithProviders(<NewCollectionPointScreen />);
+    await fillValidForm(view);
+
+    await fireEvent.press(view.getByTestId('weekday-seg'));
+    await fireEvent.press(view.getByTestId('weekday-ter'));
+    await fireEvent.press(view.getByTestId('weekday-qua'));
+    await fireEvent.changeText(view.getByTestId('input-opens-at'), '0800');
+    await fireEvent.changeText(view.getByTestId('input-closes-at'), '1800');
+
+    await fireEvent.press(view.getByTestId('button-submit-point'));
+
+    await view.findByText('Ponto cadastrado com sucesso');
+    expect(create).toHaveBeenCalledWith(
+      expect.objectContaining({ openingHours: 'Seg a Qua, 08:00 às 18:00' }),
+    );
+  });
+
+  it('does not submit marked days without the hours', async () => {
+    const create = jest.spyOn(collectionPointsApi, 'create');
+
+    const view = await renderWithProviders(<NewCollectionPointScreen />);
+    await fillValidForm(view);
+
+    await fireEvent.press(view.getByTestId('weekday-seg'));
+    await fireEvent.press(view.getByTestId('button-submit-point'));
+
+    expect(await view.findByText('Informe o horário de abertura.')).toBeVisible();
+    expect(create).not.toHaveBeenCalled();
   });
 
   it('lets the person open the point that was just created', async () => {

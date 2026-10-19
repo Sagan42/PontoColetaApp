@@ -38,6 +38,7 @@ export default function RootLayout() {
           }}
         >
           <Stack.Screen name="index" options={{ headerShown: false }} />
+          <Stack.Screen name="search" options={{ title: 'Buscar' }} />
           <Stack.Screen name="results" options={{ title: 'Resultados' }} />
           <Stack.Screen name="point/[id]" options={{ title: 'Ponto de coleta' }} />
           <Stack.Screen name="new-point" options={{ title: 'Cadastrar ponto' }} />

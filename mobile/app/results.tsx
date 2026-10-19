@@ -12,13 +12,21 @@ import {
 import { useCollectionPointSearch, type SearchMode } from '../src/features/collection-points/hooks';
 import { ApiError } from '../src/services/apiClient';
 
+/** `all` lista tudo que está publicado; os outros dois filtram. */
+function parseMode(value: unknown): SearchMode {
+  if (value === 'material') return 'material';
+  if (value === 'all') return 'all';
+  return 'address';
+}
+
 export default function ResultsScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ mode?: string; query?: string }>();
-  const mode: SearchMode = params.mode === 'material' ? 'material' : 'address';
+  const params = useLocalSearchParams<{ mode?: string; query?: string; view?: string }>();
+  const mode = parseMode(params.mode);
   const query = typeof params.query === 'string' ? params.query : '';
 
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  // A home abre direto no mapa ou na lista; a busca filtrada continua na lista.
+  const [viewMode, setViewMode] = useState<ViewMode>(params.view === 'map' ? 'map' : 'list');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const search = useCollectionPointSearch(mode, query);
@@ -38,9 +46,9 @@ export default function ResultsScreen() {
     <Screen footer={<BannerAdSlot testID="results-banner" />}>
       <View style={styles.header}>
         <Text variant="caption" color="textMuted">
-          {mode === 'material' ? 'Material buscado' : 'Endereço buscado'}
+          {headerLabel(mode)}
         </Text>
-        <Text variant="subtitle">{query}</Text>
+        <Text variant="subtitle">{mode === 'all' ? 'Londrina' : query}</Text>
         {search.data?.origin?.formattedAddress ? (
           <Text variant="caption" color="textSecondary">
             Perto de {search.data.origin.formattedAddress}
@@ -62,11 +70,7 @@ export default function ResultsScreen() {
         ) : points.length === 0 ? (
           <EmptyState
             title="Nenhum ponto encontrado"
-            description={
-              mode === 'material'
-                ? 'Ainda não há pontos cadastrados que aceitem esse material. Você pode cadastrar um.'
-                : 'Não encontramos pontos próximos desse endereço. Você pode cadastrar um.'
-            }
+            description={emptyDescription(mode)}
             actionLabel="Cadastrar novo ponto"
             onAction={() => router.push('/new-point')}
           />
@@ -104,6 +108,22 @@ export default function ResultsScreen() {
       </View>
     </Screen>
   );
+}
+
+function headerLabel(mode: SearchMode): string {
+  if (mode === 'material') return 'Material buscado';
+  if (mode === 'all') return 'Todos os pontos de coleta';
+  return 'Endereço buscado';
+}
+
+function emptyDescription(mode: SearchMode): string {
+  if (mode === 'material') {
+    return 'Ainda não há pontos cadastrados que aceitem esse material. Você pode cadastrar um.';
+  }
+  if (mode === 'all') {
+    return 'Ainda não há pontos de coleta cadastrados. Seja a primeira pessoa a cadastrar um.';
+  }
+  return 'Não encontramos pontos próximos desse endereço. Você pode cadastrar um.';
 }
 
 function errorTitle(error: unknown): string {

@@ -2,12 +2,17 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Button, Card, Chip, Screen, Text, TextField, spacing } from '../src/design-system';
+import { WeekdaySelector } from '../src/features/collection-points/components/WeekdaySelector';
 import {
   useCreateCollectionPoint,
   useSuggestedMaterials,
 } from '../src/features/collection-points/hooks';
 import {
+  composeAddress,
+  composeOpeningHours,
   emptyCollectionPointForm,
+  maskTime,
+  onlyDigits,
   validateCollectionPointForm,
   type CollectionPointForm,
   type FormErrors,
@@ -51,12 +56,15 @@ export default function NewCollectionPointScreen() {
     setErrors(validation);
     if (Object.keys(validation).length > 0) return;
 
+    // A API recebe endereço e horário como texto. Montá-los aqui, a partir de
+    // campos separados, padroniza a exibição e entrega à geocodificação uma
+    // linha sempre no mesmo formato.
     createPoint.mutate(
       {
         name: form.name.trim(),
-        address: form.address.trim(),
+        address: composeAddress(form),
         materials: form.materials,
-        openingHours: form.openingHours.trim() || null,
+        openingHours: composeOpeningHours(form),
         notes: form.notes.trim() || null,
       },
       { onSuccess: (point) => setCreatedId(point.id) },
@@ -100,15 +108,43 @@ export default function NewCollectionPointScreen() {
       />
 
       <TextField
-        label="Endereço"
-        placeholder="Ex.: Rua Pará, 500"
-        value={form.address}
-        onChangeText={(value) => update('address', value)}
-        error={errors.address}
-        hint="Rua, número e bairro em Londrina."
+        label="Rua ou avenida"
+        placeholder="Ex.: Rua Pará"
+        value={form.street}
+        onChangeText={(value) => update('street', value)}
+        error={errors.street}
+        autoCapitalize="words"
         required
-        testID="input-point-address"
+        testID="input-street"
       />
+
+      <View style={styles.addressRow}>
+        <View style={styles.numberField}>
+          <TextField
+            label="Número"
+            placeholder="500"
+            value={form.number}
+            onChangeText={(value) => update('number', onlyDigits(value))}
+            error={errors.number}
+            keyboardType="number-pad"
+            maxLength={10}
+            required
+            testID="input-number"
+          />
+        </View>
+        <View style={styles.neighborhoodField}>
+          <TextField
+            label="Bairro"
+            placeholder="Ex.: Centro"
+            value={form.neighborhood}
+            onChangeText={(value) => update('neighborhood', value)}
+            error={errors.neighborhood}
+            autoCapitalize="words"
+            required
+            testID="input-neighborhood"
+          />
+        </View>
+      </View>
 
       <Card>
         <Text variant="bodyStrong">Materiais aceitos *</Text>
@@ -166,14 +202,47 @@ export default function NewCollectionPointScreen() {
         ) : null}
       </Card>
 
-      <TextField
-        label="Horário de funcionamento"
-        placeholder="Ex.: Seg a Sex, 8h às 18h"
-        value={form.openingHours}
-        onChangeText={(value) => update('openingHours', value)}
-        error={errors.openingHours}
-        testID="input-opening-hours"
-      />
+      <Card>
+        <Text variant="bodyStrong">Horário de funcionamento</Text>
+        <Text variant="caption" color="textMuted">
+          Opcional. Se informar, marque os dias e preencha os dois horários.
+        </Text>
+
+        <View style={styles.weekdays}>
+          <WeekdaySelector
+            value={form.weekdays}
+            onChange={(next) => update('weekdays', next)}
+            error={errors.weekdays}
+          />
+        </View>
+
+        <View style={styles.hoursRow}>
+          <View style={styles.hourField}>
+            <TextField
+              label="Abre às"
+              placeholder="08:00"
+              value={form.opensAt}
+              onChangeText={(value) => update('opensAt', maskTime(value))}
+              error={errors.opensAt}
+              keyboardType="number-pad"
+              maxLength={5}
+              testID="input-opens-at"
+            />
+          </View>
+          <View style={styles.hourField}>
+            <TextField
+              label="Fecha às"
+              placeholder="18:00"
+              value={form.closesAt}
+              onChangeText={(value) => update('closesAt', maskTime(value))}
+              error={errors.closesAt}
+              keyboardType="number-pad"
+              maxLength={5}
+              testID="input-closes-at"
+            />
+          </View>
+        </View>
+      </Card>
 
       <TextField
         label="Observações / detalhes"
@@ -211,6 +280,17 @@ function submitErrorMessage(error: unknown): string {
 }
 
 const styles = StyleSheet.create({
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.md,
+  },
+  numberField: {
+    flex: 2,
+  },
+  neighborhoodField: {
+    flex: 3,
+  },
   materials: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -228,6 +308,17 @@ const styles = StyleSheet.create({
   },
   customMaterialButton: {
     marginBottom: spacing.lg,
+  },
+  weekdays: {
+    marginTop: spacing.md,
+  },
+  hoursRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    marginTop: spacing.md,
+  },
+  hourField: {
+    flex: 1,
   },
   success: {
     flex: 1,

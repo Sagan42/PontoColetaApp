@@ -1,33 +1,30 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { BannerAdSlot } from '../src/components/ads/BannerAdSlot';
-import { Button, Screen, Text, TextField, colors, spacing } from '../src/design-system';
+import {
+  ActionTile,
+  Button,
+  ListGlyph,
+  MapGlyph,
+  Screen,
+  SearchGlyph,
+  Text,
+  colors,
+  radius,
+  shadows,
+  spacing,
+} from '../src/design-system';
 
 export default function HomeScreen() {
   const router = useRouter();
-  const [address, setAddress] = useState('');
-  const [material, setMaterial] = useState('');
-  const [error, setError] = useState<string | null>(null);
 
-  function searchByAddress() {
-    const query = address.trim();
-    if (query.length < 3) {
-      setError('Digite um endereço para buscar.');
-      return;
-    }
-    setError(null);
-    router.push({ pathname: '/results', params: { mode: 'address', query } });
-  }
-
-  function searchByMaterial() {
-    const query = material.trim();
-    if (query.length < 2) {
-      setError('Digite um material para buscar.');
-      return;
-    }
-    setError(null);
-    router.push({ pathname: '/results', params: { mode: 'material', query } });
+  /**
+   * Ver tudo não exige filtro: a rota de listagem sem `material` devolve todos
+   * os pontos publicados. `mode: 'all'` já existia no hook de busca e era
+   * inalcançável pela interface até aqui.
+   */
+  function openAll(view: 'map' | 'list') {
+    router.push({ pathname: '/results', params: { mode: 'all', view } });
   }
 
   return (
@@ -51,56 +48,45 @@ export default function HomeScreen() {
         </Text>
       </View>
 
-      <View style={styles.search}>
-        <TextField
-          label="Digite seu endereço"
-          placeholder="Ex.: Rua Pará, 500"
-          value={address}
-          onChangeText={setAddress}
-          autoCapitalize="words"
-          returnKeyType="search"
-          onSubmitEditing={searchByAddress}
-          testID="input-address"
+      <View style={styles.tiles}>
+        <ActionTile
+          label="Ver mapa"
+          description="Todos os pontos da cidade"
+          icon={<MapGlyph />}
+          onPress={() => openAll('map')}
+          accessibilityHint="Abre o mapa com todos os pontos de coleta"
+          testID="tile-map"
         />
-        <Button
-          label="Buscar por endereço"
-          onPress={searchByAddress}
-          testID="button-search-address"
-          accessibilityHint="Mostra os pontos de coleta próximos do endereço informado"
+        <ActionTile
+          label="Listar pontos"
+          description="Em ordem, do mais recente"
+          icon={<ListGlyph />}
+          onPress={() => openAll('list')}
+          accessibilityHint="Abre a lista com todos os pontos de coleta"
+          testID="tile-list"
         />
-
-        <View style={styles.divider}>
-          <View style={styles.line} />
-          <Text variant="bodyStrong" color="textMuted">
-            ou
-          </Text>
-          <View style={styles.line} />
-        </View>
-
-        <TextField
-          label="Digite o material para descarte"
-          placeholder="Ex.: Pilhas, Óleo de cozinha"
-          value={material}
-          onChangeText={setMaterial}
-          autoCapitalize="sentences"
-          returnKeyType="search"
-          onSubmitEditing={searchByMaterial}
-          testID="input-material"
-        />
-        <Button
-          label="Buscar por material"
-          onPress={searchByMaterial}
-          variant="secondary"
-          testID="button-search-material"
-          accessibilityHint="Mostra os pontos que aceitam o material informado"
-        />
-
-        {error ? (
-          <Text variant="caption" color="danger" accessibilityLiveRegion="polite">
-            {error}
-          </Text>
-        ) : null}
       </View>
+
+      <Pressable
+        onPress={() => router.push('/search')}
+        accessibilityRole="button"
+        accessibilityLabel="Buscar por endereço ou material"
+        accessibilityHint="Abre a busca por endereço ou por material aceito"
+        testID="button-open-search"
+        style={({ pressed }) => [styles.searchBar, pressed ? styles.searchBarPressed : null]}
+      >
+        <View style={styles.searchIcon}>
+          <SearchGlyph />
+        </View>
+        <View style={styles.searchLabels}>
+          <Text variant="bodyStrong" color="textPrimary">
+            Buscar por endereço ou material
+          </Text>
+          <Text variant="caption" color="textMuted">
+            Filtre por perto de você ou pelo que precisa descartar
+          </Text>
+        </View>
+      </Pressable>
 
       <View style={styles.footer}>
         <Button
@@ -129,32 +115,50 @@ const styles = StyleSheet.create({
   header: {
     alignItems: 'center',
     gap: spacing.xs,
-    paddingTop: spacing.huge,
-    paddingBottom: spacing.lg,
+    paddingTop: spacing.xxxl,
+    paddingBottom: spacing.sm,
   },
   logo: {
     width: 88,
     height: 88,
     marginBottom: spacing.sm,
   },
-  search: {
+  tiles: {
+    flexDirection: 'row',
     gap: spacing.md,
   },
-  divider: {
+  searchBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.xs,
+    gap: spacing.lg,
+    backgroundColor: colors.surface,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingVertical: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    ...shadows.card,
   },
-  line: {
+  searchBarPressed: {
+    backgroundColor: colors.primarySoft,
+    borderColor: colors.primaryBorder,
+  },
+  searchIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: radius.md,
+    backgroundColor: colors.primarySoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  searchLabels: {
     flex: 1,
-    height: 1,
-    backgroundColor: colors.border,
+    gap: 2,
   },
   footer: {
     gap: spacing.sm,
     alignItems: 'center',
-    paddingTop: spacing.lg,
+    paddingTop: spacing.md,
   },
   adminLink: {
     padding: spacing.sm,

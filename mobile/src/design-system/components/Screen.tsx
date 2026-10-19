@@ -6,7 +6,6 @@ import { colors, spacing } from '../tokens';
 export interface ScreenProps {
   children: React.ReactNode;
   scrollable?: boolean;
-  footer?: React.ReactNode;
   testID?: string;
 }
 
@@ -50,7 +49,7 @@ function useKeyboardHeight(bottomInset: number): number {
   return height;
 }
 
-export function Screen({ children, scrollable = false, footer, testID }: ScreenProps) {
+export function Screen({ children, scrollable = false, testID }: ScreenProps) {
   const insets = useSafeAreaInsets();
   const keyboardHeight = useKeyboardHeight(insets.bottom);
 
@@ -78,7 +77,6 @@ export function Screen({ children, scrollable = false, footer, testID }: ScreenP
       testID={testID}
     >
       {body}
-      {footer ? <View style={styles.footer}>{footer}</View> : null}
     </View>
   );
 }
@@ -97,9 +95,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.xl,
     paddingBottom: spacing.xxl,
     gap: spacing.lg,
-  },
-  footer: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
   },
 });

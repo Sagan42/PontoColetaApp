@@ -130,25 +130,31 @@ repositório real), `FakeGeocodingService`, `InMemoryMetricsRepository`,
 - **`format.test.ts`** — distância em metros/quilômetros com vírgula decimal,
   lista de materiais com "e", datas em ordem brasileira.
 - **`collectionPointForm.test.ts`** — validação do formulário: campos
-  obrigatórios, limites, espaços em volta, uma mensagem por campo.
-- **`HomeScreen.test.tsx`** — a Home apresenta produto, cidade e **as duas**
-  formas de busca; cada uma navega com os parâmetros certos; busca vazia não
-  navega e explica o porquê; o cadastro está acessível.
+  obrigatórios, limites, espaços em volta, uma mensagem por campo; horário
+  tudo-ou-nada em 24h; composição do endereço e do horário enviados à API;
+  máscara de hora e filtro de dígitos.
+- **`HomeScreen.test.tsx`** — a Home apresenta produto e cidade; os dois
+  quadrados abrem **todos** os pontos em mapa e em lista (`mode=all`); o botão
+  retangular leva à busca; cadastro e área administrativa seguem acessíveis.
+- **`SearchScreen.test.tsx`** — **as duas** formas de busca; cada uma navega com
+  os parâmetros certos; busca vazia não navega e explica o porquê.
 - **`ResultsScreen.test.tsx`** — os quatro estados (carregando, sucesso, vazio,
   erro); lista com nome, endereço, materiais e distância; alternância
   lista ↔ mapa sobre o mesmo conjunto; abertura dos detalhes; mensagem
   específica para endereço não localizado; 4xx não é repetido automaticamente e
   a pessoa pode tentar de novo.
 - **`NewPointScreen.test.tsx`** — submit bloqueado com formulário inválido; erro
-  do campo some ao corrigir; seleção de material sugerido; envio com o payload
-  correto; confirmação de sucesso e navegação para o ponto criado; **três
-  toques seguidos enviam uma única vez**; mensagem de duplicata.
+  do campo some ao corrigir; número do endereço recusa o que não é dígito;
+  seleção de material sugerido; envio com o payload correto, incluindo endereço
+  e horário compostos; dias marcados sem horário não enviam; confirmação de
+  sucesso e navegação para o ponto criado; **três toques seguidos enviam uma
+  única vez**; mensagem de duplicata.
 
 ### Mocks do mobile (`jest.setup.js`)
 
-Apenas módulos nativos sem sentido em Node: `react-native-maps` vira uma `View`,
-`react-native-google-mobile-ads` vira componentes vazios. `expo-router` é
-mockado por teste, porque cada tela precisa de parâmetros diferentes.
+Apenas módulos nativos sem sentido em Node: `react-native-maps` vira uma `View`.
+`expo-router` é mockado por teste, porque cada tela precisa de parâmetros
+diferentes.
 
 `__tests__/support/render.tsx` monta os mesmos providers do app
 (`QueryClientProvider`, `SafeAreaProvider`) com retry desligado.
@@ -165,7 +171,7 @@ mockado por teste, porque cada tela precisa de parâmetros diferentes.
 | DynamoDB de verdade               | exigiria conta AWS ou LocalStack; o dublê verifica os comandos enviados    |
 | API Gateway / Cognito de verdade  | configuração de infraestrutura, verificada por `terraform validate`        |
 | Renderização real do mapa         | depende de módulo nativo e do Google Play Services; há fallback testável   |
-| AdMob                             | não pode ser exercitado sem SDK nativo e conta real                        |
+| Comportamento do teclado          | depende do IME real; `Screen` usa os eventos nativos de teclado            |
 | Tela administrativa (componentes) | login e gráfico dependem de Cognito real; a lógica de métricas é testada no backend |
 
 Essas lacunas são reais e conscientes. A primeira que valeria fechar, quando

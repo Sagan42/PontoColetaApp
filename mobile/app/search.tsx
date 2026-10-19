@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { BannerAdSlot } from '../src/components/ads/BannerAdSlot';
 import { Button, Screen, Text, TextField, colors, spacing } from '../src/design-system';
 
 /**
@@ -36,7 +35,7 @@ export default function SearchScreen() {
   }
 
   return (
-    <Screen scrollable footer={<BannerAdSlot testID="search-banner" />}>
+    <Screen scrollable>
       <Text variant="body" color="textSecondary">
         Busque pelos pontos próximos de um endereço ou pelos que aceitam um material.
       </Text>

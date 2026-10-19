@@ -1,6 +1,5 @@
 import { useRouter } from 'expo-router';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
-import { BannerAdSlot } from '../src/components/ads/BannerAdSlot';
 import {
   ActionTile,
   Button,
@@ -28,7 +27,7 @@ export default function HomeScreen() {
   }
 
   return (
-    <Screen scrollable footer={<BannerAdSlot testID="home-banner" />}>
+    <Screen scrollable>
       <View style={styles.header}>
         <Image
           source={require('../assets/logo-mark.png')}

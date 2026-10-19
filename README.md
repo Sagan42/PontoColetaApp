@@ -50,7 +50,6 @@ Comunidades Sustentáveis) e **ODS 12** (Consumo e Produção Responsáveis).
 | Infraestrutura  | Terraform (única fonte de verdade)                             |
 | Build Lambda    | esbuild                                                        |
 | Testes          | Vitest (backend), Jest + RNTL (mobile)                         |
-| Anúncios        | Google AdMob (banner discreto, isolado em um componente)       |
 
 ## Arquitetura
 
@@ -153,10 +152,9 @@ npm test                  # 37 testes
 npm run assets:generate   # regenera ícone, splash e logo
 ```
 
-O app **roda no Expo Go**: o slot de anúncio não renderiza nada sem o módulo
-nativo e o mapa tem fallback para a lista. Para o app completo, com AdMob e mapa
-garantido, use uma development build, conforme
-[docs/local-development.md](docs/local-development.md).
+O app **roda no Expo Go**: o mapa tem fallback para a lista quando o módulo
+nativo não está presente. Para o mapa garantido, use uma development build,
+conforme [docs/local-development.md](docs/local-development.md).
 
 ## Testes, lint e typecheck
 

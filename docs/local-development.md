@@ -64,8 +64,7 @@ cp mobile/.env.example mobile/.env
 | `EXPO_PUBLIC_API_URL`             | `http://10.0.2.2:3000` para o emulador Android falar com o host |
 | `EXPO_PUBLIC_COGNITO_REGION`      | região do user pool (etapa futura)                             |
 | `EXPO_PUBLIC_COGNITO_CLIENT_ID`   | output `admin_client_id` (etapa futura)                        |
-| `EXPO_PUBLIC_ADS_ENABLED`         | mantenha `false` em desenvolvimento                            |
-| `EXPO_PUBLIC_ADMOB_BANNER_UNIT_ID`| unidade de **teste** do Google                                 |
+| `GOOGLE_MAPS_ANDROID_API_KEY`     | chave do Maps; **sem** `EXPO_PUBLIC_`, vai só para o manifesto  |
 
 Tudo que começa com `EXPO_PUBLIC_` é embutido no bundle e, portanto, público.
 Segredo nenhum entra aí.
@@ -109,12 +108,10 @@ npm run assets:generate   # regenera ícone, splash e logo a partir da geometria
 | ------------------------ | ------- | ----------------- |
 | Home, busca, lista, detalhes, cadastro | sim | sim |
 | Mapa (`react-native-maps`) | depende da versão do Expo Go | sim |
-| AdMob                    | **não** | sim               |
 
-O app foi escrito para degradar com elegância: `BannerAdSlot` não renderiza nada
-quando o módulo nativo não existe, e o mapa tem um error boundary que orienta a
-usar a lista. Ou seja, o app **inicia e funciona no Expo Go** mesmo sem esses
-módulos.
+O app foi escrito para degradar com elegância: o mapa tem um error boundary que
+orienta a usar a lista quando o módulo nativo não está disponível. Ou seja, o
+app **inicia e funciona no Expo Go** mesmo sem ele.
 
 Para o app completo:
 

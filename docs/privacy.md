@@ -1,7 +1,11 @@
 # Privacidade
 
+Última atualização: 19 de outubro de 2026.
+
 Princípio: **coletar o mínimo possível.** O PontoColeta é um serviço público de
 utilidade; ele não precisa saber quem você é para dizer onde descartar uma pilha.
+
+O app **não exibe anúncios** e não embarca nenhum SDK de publicidade.
 
 ## O que NÃO é coletado
 
@@ -14,6 +18,9 @@ endereço IP associado a uma pessoa
 histórico individual de buscas
 qualquer dado que permita reconstruir o que uma pessoa específica fez
 ```
+
+O identificador de publicidade do Android (`AD_ID`) não é lido, não é enviado e
+a permissão correspondente não é declarada no manifesto.
 
 Não existe login para usuário comum. Consultar, buscar, ver detalhes e cadastrar
 são todos anônimos.
@@ -72,28 +79,22 @@ Buscar por endereço digitado é um caminho de primeira classe, não um plano B.
 | -------------------------- | ------------------------------------- | ---------------------------------- |
 | **Nominatim (OpenStreetMap)** | o endereço digitado, sem identificação | busca por endereço e cadastro     |
 | **Google Maps (Android)**  | o que qualquer app de mapa envia ao renderizar | ao abrir a aba mapa       |
-| **Google AdMob**           | dados de exibição de anúncio           | apenas em builds com anúncios ligados |
 | **Amazon Cognito**         | e-mail e senha do administrador        | apenas no login administrativo     |
 | **AWS (API Gateway, Lambda, DynamoDB, CloudWatch)** | as requisições do app | sempre |
 
 Cada serviço tem sua própria política de privacidade, e o app está sujeito a
 elas nas partes que os utilizam.
 
-## AdMob
+## Anúncios
 
-- Desligado por padrão (`EXPO_PUBLIC_ADS_ENABLED=false`); em desenvolvimento usa
-  unidades de teste do Google, que não geram impressão real.
-- Quando ligado, exibe **um banner discreto** no rodapé de Home, resultados e
-  detalhes. Não aparece na tela de cadastro, não cobre mapa nem lista, não
-  interrompe leitura e não há anúncio intersticial ou premiado.
-- O AdMob pode usar identificadores de publicidade do próprio dispositivo,
-  conforme as configurações do Android e o consentimento da pessoa. Isso é do
-  SDK do Google, não do PontoColeta: o app não coleta nem envia esse
-  identificador por conta própria.
-- Finalidade: cobrir custo básico de infraestrutura sem cobrar da população.
+Não há anúncios. O app não exibe banner, intersticial, vídeo nem conteúdo
+patrocinado, e nenhum SDK de publicidade é embarcado — portanto não há
+identificador de publicidade, perfil de interesse, rastreamento entre apps nem
+compartilhamento de dados com rede de anúncios.
 
-Se o app for publicado com anúncios ligados, a ficha da Play Store e a política
-de privacidade precisam declarar o uso do AdMob.
+O custo de infraestrutura é mantido baixo por outros meios: serverless com teto
+de concorrência, limites de taxa na API e alarmes de orçamento. Ver
+[ADR-008](decisions/ADR-008-protecao-contra-abuso.md).
 
 ## Segurança dos dados
 
@@ -123,12 +124,30 @@ existe** — depende do proprietário e de um domínio. O conteúdo deve declara
 no mínimo:
 
 1. quais dados o app coleta (contadores agregados; dados de pontos de coleta);
-2. quais não coleta (nada que identifique pessoas; sem GPS);
+2. quais não coleta (nada que identifique pessoas; sem GPS; sem identificador
+   de publicidade);
 3. a finalidade de cada coleta;
-4. os serviços de terceiros (Nominatim, Google Maps, AdMob, AWS);
-5. o uso do AdMob e do identificador de publicidade, quando ligado;
-6. um contato para pedidos de correção ou remoção;
-7. a data da última atualização.
+4. os serviços de terceiros (Nominatim, Google Maps, AWS);
+5. um contato para pedidos de correção ou remoção;
+6. a data da última atualização.
+
+### Em que idioma publicar
+
+Em **português do Brasil**, o mesmo idioma do app e da ficha da Play Store.
+
+O que a Google exige da política é que ela esteja em uma URL pública e ativa,
+que não seja editável pelo público, que se refira especificamente a este app e
+que descreva o tratamento dos dados. Não há exigência de idioma — a
+documentação da Play cita inglês em outro contexto (credenciais de login para a
+revisão do app), não para a política.
+
+O argumento mais forte não é da Google e sim da LGPD: a informação precisa ser
+clara e acessível ao titular. O público do PontoColeta é de Londrina e a
+interface só existe em pt-BR; uma política em inglês cumpriria a letra e
+falharia no propósito.
+
+Se um dia a ficha ganhar outros idiomas ou outros países de distribuição, a
+política acompanha, com uma versão por idioma.
 
 Este documento serve de base direta para esse texto. Ver
 [play-store.md](play-store.md) para o restante da ficha.

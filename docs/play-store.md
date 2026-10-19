@@ -17,8 +17,8 @@ build foi gerada e nenhuma conta foi configurada — isso depende do proprietár
 | Permissões                  | `app.json` → `android.permissions`            | `INTERNET`, `ACCESS_NETWORK_STATE`                |
 | Permissões bloqueadas       | `android.blockedPermissions`                  | localização fina e grosseira                      |
 | Perfis de build             | `eas.json`                                    | development, preview (APK), production (**AAB**)  |
-| Configuração do AdMob       | `app.json` → `react-native-google-mobile-ads` | App ID **de teste** do Google                     |
-| Chave do Google Maps        | `app.json` → `android.config.googleMaps`      | **placeholder**                                   |
+| Anúncios                    | —                                             | **não existem**; nenhum SDK de publicidade        |
+| Chave do Google Maps        | `app.config.js` → `android.config.googleMaps` | variável `GOOGLE_MAPS_ANDROID_API_KEY`            |
 | Base da política de privacidade | [`privacy.md`](privacy.md)                | conteúdo pronto para publicar                     |
 
 ### Assets da identidade
@@ -41,7 +41,6 @@ O SVG equivalente, fonte de verdade vetorial, está em `docs/brand/logo.svg`.
 | Conta do Google Play Console (US$ 25)  | pagamento e identidade do titular                  |
 | `extra.eas.projectId`                  | criado por `eas init` na conta Expo do proprietário |
 | Chave do Google Maps para Android      | exige projeto no Google Cloud                      |
-| App ID e unidade de banner reais do AdMob | exigem conta AdMob                              |
 | Keystore de upload                     | gerado e guardado pelo EAS ou pelo proprietário     |
 | URL pública da política de privacidade | exige domínio                                      |
 | Textos, capturas de tela e feature graphic | conteúdo da ficha                              |
@@ -69,9 +68,10 @@ npm run build:android:production
 ```
 
 O perfil `production` do `eas.json` gera **Android App Bundle**, formato exigido
-pela Play Store, com `autoIncrement: "versionCode"` e `EXPO_PUBLIC_ADS_ENABLED=true`.
+pela Play Store, com `autoIncrement: true` — o `versionCode` é controlado
+remotamente pelo EAS (`cli.appVersionSource: "remote"`).
 
-**Development build** (necessária para AdMob e recomendada para o mapa):
+**Development build** (recomendada para o mapa):
 
 ```bash
 npx expo install expo-dev-client
@@ -120,7 +120,7 @@ O `eas.json` já traz `submit.production.android` com `track: internal` e
 | Categoria            | Estilo de vida ou Ferramentas                                                                      |
 | Classificação        | Livre                                                                                              |
 | Capturas de tela     | Home, resultados em lista, resultados no mapa, detalhes, cadastro                                   |
-| Política de privacidade | URL pública baseada em [`privacy.md`](privacy.md)                                              |
+| Política de privacidade | URL pública baseada em [`privacy.md`](privacy.md), em português do Brasil                       |
 
 ## Data Safety
 
@@ -128,22 +128,21 @@ Baseado no comportamento real do app:
 
 | Pergunta                                | Resposta                                                                 |
 | --------------------------------------- | ------------------------------------------------------------------------ |
-| Coleta dados pessoais?                  | Não pelo app. Ver a ressalva do AdMob abaixo.                            |
+| Coleta dados pessoais?                  | Não.                                                                     |
 | Coleta localização?                     | Não. As permissões de localização estão bloqueadas.                      |
-| Coleta identificadores?                 | Não pelo app. Com anúncios ligados, o SDK do AdMob pode usar o ID de publicidade. |
+| Coleta identificadores?                 | Não. Sem SDK de publicidade, sem `AD_ID` no manifesto.                   |
 | Dados são compartilhados com terceiros? | Endereço digitado vai ao provedor de geocodificação, sem identificação.  |
 | Dados trafegam criptografados?          | Sim, HTTPS.                                                              |
 | É possível excluir dados?               | Não há conta a excluir. Correção/remoção de um ponto pelo contato do app.|
 
-> Se publicar com AdMob **ligado**, o Data Safety precisa declarar o uso do
-> identificador de publicidade para anúncios. Publicar com anúncios desligados
-> mantém a declaração mais simples.
+> Sem anúncios, a seção **Ads** do questionário é respondida com "o app não
+> contém anúncios" e a permissão `com.google.android.gms.permission.AD_ID` não
+> precisa ser declarada — é a declaração mais simples possível.
 
 ## Antes do primeiro envio
 
 - [ ] `eas init` e `projectId` preenchido
 - [ ] Chave real do Google Maps
-- [ ] App ID e unidade de banner reais do AdMob (ou anúncios desligados)
 - [ ] `EXPO_PUBLIC_API_URL` apontando para o ambiente **prod**
 - [ ] `EXPO_PUBLIC_COGNITO_CLIENT_ID` do ambiente prod
 - [ ] Política de privacidade publicada em URL pública

@@ -1,7 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
-import { BannerAdSlot } from '../../src/components/ads/BannerAdSlot';
 import {
   Button,
   Card,
@@ -56,7 +55,7 @@ export default function CollectionPointDetailsScreen() {
   const distance = formatDistance(point.distanceKm);
 
   return (
-    <Screen scrollable footer={<BannerAdSlot testID="details-banner" />}>
+    <Screen scrollable>
       <View style={styles.header}>
         <Text variant="title" accessibilityRole="header">
           {point.name}

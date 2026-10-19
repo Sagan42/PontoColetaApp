@@ -144,7 +144,8 @@ autenticada.
 mobile/
 ├── app/                      rotas (Expo Router)
 │   ├── _layout.tsx           providers + navegação
-│   ├── index.tsx             Home
+│   ├── index.tsx             Home (ver mapa, listar pontos, atalhos)
+│   ├── search.tsx            busca por endereço ou material
 │   ├── results.tsx           resultados (lista ↔ mapa)
 │   ├── point/[id].tsx        detalhes
 │   ├── new-point.tsx         cadastro
@@ -154,7 +155,6 @@ mobile/
     ├── features/             collection-points, admin
     ├── services/             apiClient, config, metrics
     ├── schemas/              validação de formulário (zod)
-    ├── hooks/                utilidades de UI
     └── utils/                formatação pt-BR
 ```
 
@@ -199,7 +199,6 @@ sequenceDiagram
 | --------------------------- | ---------------------------- | ---------------------------------------- |
 | Nominatim (OpenStreetMap)   | endereço → coordenadas       | `NominatimGeocodingService` (porta)      |
 | Google Maps (Android)       | renderização do mapa         | `CollectionPointsMap`                    |
-| Google AdMob                | banner discreto              | `BannerAdSlot`                           |
 | Amazon Cognito              | login administrativo         | `features/admin/auth.ts`                 |
 
 Cada um está atrás de um único arquivo. Trocar qualquer um deles é uma mudança

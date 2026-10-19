@@ -9,28 +9,19 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_ADS_ENABLED": "false"
       }
     },
     "preview": {
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_ADS_ENABLED": "false"
       }
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
       },
-      "autoIncrement": true,
-      "env": {
-        "EXPO_PUBLIC_ADS_ENABLED": "false"
-      }
+      "autoIncrement": true
     }
   },
   "submit": {

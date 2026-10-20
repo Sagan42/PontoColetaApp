@@ -4,7 +4,16 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const assetsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'assets');
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const assetsDir = path.resolve(scriptDir, '..', 'assets');
+const repoRoot = path.resolve(scriptDir, '..', '..');
+
+/**
+ * Os recursos da loja ficam fora de `mobile/`: `assetBundlePatterns` é `**\/*`,
+ * então qualquer arquivo sob o projeto Expo entraria no binário. Ícone de ficha
+ * e banner não têm por que viajar dentro do APK.
+ */
+const storeDir = path.resolve(repoRoot, 'docs', 'brand');
 
 const PALETTE = {
   primary: [0x1b, 0x7a, 0x46],
@@ -73,21 +82,38 @@ function isInsideRoundedSquare(x, y, cornerRadius) {
   return Math.hypot(dx, dy) <= cornerRadius;
 }
 
-function renderMark({ size, background, pin, leaf, scale }) {
-  const pixels = Buffer.alloc(size * size * 4);
+/**
+ * A marca é desenhada num quadrado. Numa tela retangular esse quadrado é
+ * centralizado e as coordenadas do desenho passam a ser medidas a partir dele,
+ * não da tela: assim o pino não estica. Com `width === height` a conta é a
+ * mesma de antes, e os ícones saem idênticos.
+ */
+function renderMark({ width, height, size, background, backgroundShape, pin, leaf, scale }) {
+  const canvasWidth = width ?? size;
+  const canvasHeight = height ?? size;
 
-  for (let py = 0; py < size; py += 1) {
-    for (let px = 0; px < size; px += 1) {
+  const side = Math.min(canvasWidth, canvasHeight);
+  const insetX = (canvasWidth - side) / 2;
+  const insetY = (canvasHeight - side) / 2;
+
+  const pixels = Buffer.alloc(canvasWidth * canvasHeight * 4);
+
+  for (let py = 0; py < canvasHeight; py += 1) {
+    for (let px = 0; px < canvasWidth; px += 1) {
       let backgroundHits = 0;
       let pinHits = 0;
       let leafHits = 0;
 
       for (let sy = 0; sy < SAMPLES; sy += 1) {
         for (let sx = 0; sx < SAMPLES; sx += 1) {
-          const x = (px + (sx + 0.5) / SAMPLES) / size;
-          const y = (py + (sy + 0.5) / SAMPLES) / size;
+          const x = (px + (sx + 0.5) / SAMPLES - insetX) / side;
+          const y = (py + (sy + 0.5) / SAMPLES - insetY) / side;
 
-          if (background && isInsideRoundedSquare(x, y, 0.22)) backgroundHits += 1;
+          if (background) {
+            // Banner sangra até a borda; ícone usa o quadrado arredondado.
+            if (backgroundShape === 'full') backgroundHits += 1;
+            else if (isInsideRoundedSquare(x, y, 0.22)) backgroundHits += 1;
+          }
 
           const mx = (x - 0.5) / scale + 0.5;
           const my = (y - 0.5) / scale + 0.5;
@@ -122,7 +148,7 @@ function renderMark({ size, background, pin, leaf, scale }) {
       paint(pin, pinHits / total);
       paint(leaf, leafHits / total);
 
-      const offset = (py * size + px) * 4;
+      const offset = (py * canvasWidth + px) * 4;
       pixels[offset] = Math.round(colour[0]);
       pixels[offset + 1] = Math.round(colour[1]);
       pixels[offset + 2] = Math.round(colour[2]);
@@ -144,19 +170,19 @@ function chunk(type, data) {
   return Buffer.concat([length, typeAndData, checksum]);
 }
 
-function encodePng(pixels, size) {
+function encodePng(pixels, width, height) {
   const header = Buffer.alloc(13);
-  header.writeUInt32BE(size, 0);
-  header.writeUInt32BE(size, 4);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
   header[8] = 8;
   header[9] = 6;
   header[10] = 0;
   header[11] = 0;
   header[12] = 0;
 
-  const stride = size * 4;
-  const raw = Buffer.alloc((stride + 1) * size);
-  for (let row = 0; row < size; row += 1) {
+  const stride = width * 4;
+  const raw = Buffer.alloc((stride + 1) * height);
+  for (let row = 0; row < height; row += 1) {
     raw[row * (stride + 1)] = 0;
     pixels.copy(raw, row * (stride + 1) + 1, row * stride, (row + 1) * stride);
   }
@@ -210,13 +236,42 @@ const OUTPUTS = [
     leaf: PALETTE.primary,
     scale: 0.62,
   },
+
+  // Ficha da Play Store. O console recusa o ícone em qualquer tamanho que não
+  // seja 512x512, e o de `assets/` é 1024 porque é o que o Expo quer.
+  {
+    file: 'play-icon.png',
+    dir: storeDir,
+    size: 512,
+    background: PALETTE.primary,
+    pin: PALETTE.surface,
+    leaf: PALETTE.primary,
+    scale: 0.62,
+  },
+  {
+    file: 'play-feature-graphic.png',
+    dir: storeDir,
+    width: 1024,
+    height: 500,
+    background: PALETTE.primary,
+    backgroundShape: 'full',
+    pin: PALETTE.surface,
+    leaf: PALETTE.primary,
+    scale: 0.5,
+  },
 ];
 
-mkdirSync(assetsDir, { recursive: true });
-
 for (const output of OUTPUTS) {
+  const width = output.width ?? output.size;
+  const height = output.height ?? output.size;
+  const directory = output.dir ?? assetsDir;
+
+  mkdirSync(directory, { recursive: true });
+
   const pixels = renderMark(output);
-  const png = encodePng(pixels, output.size);
-  writeFileSync(path.join(assetsDir, output.file), png);
-  console.log(`wrote assets/${output.file} (${output.size}x${output.size}, ${png.length} bytes)`);
+  const png = encodePng(pixels, width, height);
+  writeFileSync(path.join(directory, output.file), png);
+
+  const label = path.relative(repoRoot, path.join(directory, output.file)).replace(/\\/g, '/');
+  console.log(`wrote ${label} (${width}x${height}, ${png.length} bytes)`);
 }

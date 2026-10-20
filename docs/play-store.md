@@ -20,7 +20,7 @@ build foi gerada e nenhuma conta foi configurada — isso depende do proprietár
 | Anúncios                    | —                                             | **não existem**; nenhum SDK de publicidade        |
 | Denúncia de conteúdo        | tela de detalhes do ponto → "Denunciar"       | exigida pela política de conteúdo do utilizador   |
 | Chave do Google Maps        | `app.config.js` → `android.config.googleMaps` | variável `GOOGLE_MAPS_ANDROID_API_KEY`            |
-| Base da política de privacidade | [`privacy.md`](privacy.md)                | conteúdo pronto para publicar                     |
+| Política de privacidade     | [`privacy.md`](privacy.md) no GitHub Pages    | **publicada** em `sagan42.github.io/PontoColetaApp/privacy` |
 
 ### Assets da identidade
 
@@ -43,7 +43,6 @@ O SVG equivalente, fonte de verdade vetorial, está em `docs/brand/logo.svg`.
 | `extra.eas.projectId`                  | criado por `eas init` na conta Expo do proprietário |
 | Chave do Google Maps para Android      | exige projeto no Google Cloud                      |
 | Keystore de upload                     | gerado e guardado pelo EAS ou pelo proprietário     |
-| URL pública da política de privacidade | exige domínio                                      |
 | Textos, capturas de tela e feature graphic | conteúdo da ficha                              |
 | Preenchimento do Data Safety           | declaração formal do titular                       |
 
@@ -121,7 +120,7 @@ O `eas.json` já traz `submit.production.android` com `track: internal` e
 | Categoria            | Estilo de vida ou Ferramentas                                                                      |
 | Classificação        | Livre                                                                                              |
 | Capturas de tela     | Home, resultados em lista, resultados no mapa, detalhes, cadastro                                   |
-| Política de privacidade | URL pública baseada em [`privacy.md`](privacy.md), em português do Brasil                       |
+| Política de privacidade | `https://sagan42.github.io/PontoColetaApp/privacy` — servida de [`privacy.md`](privacy.md)        |
 
 ## Data Safety
 
@@ -140,6 +139,53 @@ Baseado no comportamento real do app:
 > Sem anúncios, a seção **Ads** do questionário é respondida com "o app não
 > contém anúncios" e a permissão `com.google.android.gms.permission.AD_ID` não
 > precisa ser declarada — é a declaração mais simples possível.
+
+## A política de privacidade publicada
+
+A política está no ar em `https://sagan42.github.io/PontoColetaApp/privacy`,
+servida pelo GitHub Pages a partir de [`privacy.md`](privacy.md) deste mesmo
+repositório — o arquivo **é** a política, não um rascunho dela.
+
+Duas consequências de servir um arquivo do repositório:
+
+- **Editar `privacy.md` publica imediatamente.** Não há revisão entre o commit
+  e o texto que a Google lê. Trate esse arquivo como se fosse a página que é.
+- **Nada de nota interna lá dentro.** Instrução para o desenvolvedor, "isto
+  ainda não existe", pendência — tudo isso vive aqui, neste arquivo. A política
+  fala com quem usa o app.
+
+O texto deve declarar, no mínimo:
+
+1. quais dados o app coleta (contadores agregados; dados de pontos de coleta;
+   feedback com nome opcional; denúncias);
+2. quais não coleta (nada que identifique quem busca; sem GPS; sem identificador
+   de publicidade);
+3. a finalidade de cada coleta;
+4. os serviços de terceiros (Nominatim, Google Maps, AWS);
+5. um **endereço de e-mail** para pedidos de correção ou remoção;
+6. a data da última atualização.
+
+> **O contato precisa ser um e-mail escrito na página**, não "o contato da ficha
+> da Play Store". O revisor abre a URL **antes** de o app existir na loja: uma
+> remissão à ficha é um beco sem saída nesse momento.
+
+### Em que idioma publicar
+
+Em **português do Brasil**, o mesmo idioma do app e da ficha.
+
+O que a Google exige da política é que ela esteja em uma URL pública e ativa,
+que não seja editável pelo público, que se refira especificamente a este app e
+que descreva o tratamento dos dados. Não há exigência de idioma — a
+documentação da Play cita inglês em outro contexto (credenciais de login para a
+revisão do app), não para a política.
+
+O argumento mais forte não é da Google e sim da LGPD: a informação precisa ser
+clara e acessível ao titular. O público do PontoColeta é de Londrina e a
+interface só existe em pt-BR; uma política em inglês cumpriria a letra e
+falharia no propósito.
+
+Se um dia a ficha ganhar outros idiomas ou países de distribuição, a política
+acompanha, com uma versão por idioma.
 
 ## Conteúdo gerado pelo utilizador
 
@@ -163,7 +209,8 @@ Mudança de funcionalidade que afeta o questionário exige reenviá-lo.
 - [ ] Chave real do Google Maps
 - [ ] `EXPO_PUBLIC_API_URL` apontando para o ambiente **prod**
 - [ ] `EXPO_PUBLIC_COGNITO_CLIENT_ID` do ambiente prod
-- [ ] Política de privacidade publicada em URL pública
+- [x] Política de privacidade publicada em URL pública
+- [x] E-mail de contato dentro da política (`tasemcorp@gmail.com`)
 - [ ] Capturas de tela e textos
 - [ ] Data Safety preenchido
 - [ ] Build AAB testada em dispositivo real

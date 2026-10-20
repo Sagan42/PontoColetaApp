@@ -1,6 +1,6 @@
 # Privacidade
 
-Última atualização: 19 de outubro de 2026.
+Última atualização: 20 de outubro de 2026.
 
 Princípio: **coletar o mínimo possível.** O PontoColeta é um serviço público de
 utilidade; ele não precisa saber quem você é para dizer onde descartar uma pilha.
@@ -152,41 +152,14 @@ O único dado pessoal possível é um nome escrito voluntariamente no feedback.
 
 Para pedir correção ou remoção de um **ponto de coleta** — por exemplo, se o
 local fechou, os dados estão errados ou uma informação inadequada foi cadastrada
-— ou a remoção de um **feedback** já enviado, o contato é o do responsável pelo
-aplicativo, publicado na ficha da Play Store.
+—, a remoção de um **feedback** já enviado, ou qualquer outro pedido sobre seus
+dados, escreva para:
 
-## Política de privacidade da Play Store
+**tasemcorp@gmail.com**
 
-A Google exige uma URL pública de política de privacidade. Ela ainda **não
-existe** — depende do proprietário e de um domínio. O conteúdo deve declarar,
-no mínimo:
+Respondemos pelo mesmo endereço. Não é preciso se identificar além do necessário
+para localizar o que deve ser corrigido ou removido.
 
-1. quais dados o app coleta (contadores agregados; dados de pontos de coleta;
-   feedback com nome opcional);
-2. quais não coleta (nada que identifique pessoas; sem GPS; sem identificador
-   de publicidade);
-3. a finalidade de cada coleta;
-4. os serviços de terceiros (Nominatim, Google Maps, AWS);
-5. um contato para pedidos de correção ou remoção;
-6. a data da última atualização.
-
-### Em que idioma publicar
-
-Em **português do Brasil**, o mesmo idioma do app e da ficha da Play Store.
-
-O que a Google exige da política é que ela esteja em uma URL pública e ativa,
-que não seja editável pelo público, que se refira especificamente a este app e
-que descreva o tratamento dos dados. Não há exigência de idioma — a
-documentação da Play cita inglês em outro contexto (credenciais de login para a
-revisão do app), não para a política.
-
-O argumento mais forte não é da Google e sim da LGPD: a informação precisa ser
-clara e acessível ao titular. O público do PontoColeta é de Londrina e a
-interface só existe em pt-BR; uma política em inglês cumpriria a letra e
-falharia no propósito.
-
-Se um dia a ficha ganhar outros idiomas ou outros países de distribuição, a
-política acompanha, com uma versão por idioma.
-
-Este documento serve de base direta para esse texto. Ver
-[play-store.md](play-store.md) para o restante da ficha.
+Pontos de coleta com informação errada ou conteúdo impróprio também podem ser
+**denunciados dentro do app**, na tela de detalhes do ponto — é o caminho mais
+rápido, e não exige escrever para ninguém.

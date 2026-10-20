@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { REPORT_REASONS } from '../domain/collection-point-report.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -35,3 +36,21 @@ export const createCollectionPointSchema = z.object({
 });
 
 export type CreateCollectionPointBody = z.infer<typeof createCollectionPointSchema>;
+
+export const reportCollectionPointSchema = z.object({
+  reason: z.enum(REPORT_REASONS),
+  details: z.string().trim().max(500).nullish(),
+});
+
+const REPORTS_DEFAULT_LIMIT = 20;
+const REPORTS_MAX_LIMIT = 50;
+
+export const listReportsQuerySchema = z.object({
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(REPORTS_MAX_LIMIT)
+    .default(REPORTS_DEFAULT_LIMIT),
+  cursor: z.string().min(1).max(2000).optional(),
+});

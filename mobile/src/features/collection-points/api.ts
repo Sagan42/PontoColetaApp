@@ -67,6 +67,38 @@ export interface CreateCollectionPointPayload {
   notes?: string | null;
 }
 
+export const REPORT_REASONS = [
+  { key: 'inappropriate', label: 'Conteúdo impróprio ou ofensivo' },
+  { key: 'incorrect', label: 'Informação incorreta' },
+  { key: 'closed', label: 'O local não existe ou fechou' },
+  { key: 'duplicate', label: 'Ponto repetido' },
+  { key: 'other', label: 'Outro motivo' },
+] as const;
+
+export type ReportReason = (typeof REPORT_REASONS)[number]['key'];
+
+export interface ReportCollectionPointPayload {
+  pointId: string;
+  reason: ReportReason;
+  details: string;
+}
+
+export const reportSchema = z.object({
+  id: z.string(),
+  pointId: z.string(),
+  pointName: z.string(),
+  reason: z.string(),
+  details: z.string().nullable(),
+  reportedAt: z.string(),
+});
+
+export type CollectionPointReport = z.infer<typeof reportSchema>;
+
+const reportsEnvelope = z.object({
+  data: z.array(reportSchema),
+  meta: z.looseObject({ nextCursor: z.string().nullish().catch(null) }).optional(),
+});
+
 export const collectionPointsApi = {
   async listAll(cursor?: string | null, signal?: AbortSignal): Promise<CollectionPointsResult> {
     const response = await apiRequest('/v1/collection-points', {
@@ -125,5 +157,38 @@ export const collectionPointsApi = {
       signal,
     });
     return response.data.map((item) => item.label);
+  },
+
+  /** Denúncia é anônima: nada identifica quem denunciou, nem aqui nem no servidor. */
+  async report(payload: ReportCollectionPointPayload): Promise<void> {
+    await apiRequest(`/v1/collection-points/${encodeURIComponent(payload.pointId)}/reports`, {
+      method: 'POST',
+      body: {
+        reason: payload.reason,
+        details: payload.details.trim().length > 0 ? payload.details.trim() : null,
+      },
+    });
+  },
+
+  async listReports(
+    token: string,
+    cursor?: string | null,
+    signal?: AbortSignal,
+  ): Promise<{ items: CollectionPointReport[]; nextCursor: string | null }> {
+    const response = await apiRequest('/v1/admin/reports', {
+      schema: reportsEnvelope,
+      query: { cursor: cursor ?? undefined },
+      token,
+      signal,
+    });
+    return { items: response.data, nextCursor: response.meta?.nextCursor ?? null };
+  },
+
+  async hide(id: string, token: string): Promise<CollectionPoint> {
+    const response = await apiRequest(
+      `/v1/admin/collection-points/${encodeURIComponent(id)}/hide`,
+      { schema: collectionPointEnvelope, method: 'POST', token },
+    );
+    return response.data;
   },
 };

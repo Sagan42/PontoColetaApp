@@ -26,17 +26,30 @@ import {
   signInAdmin,
   type AdminSession,
 } from '../../src/features/admin/auth';
+import {
+  useCollectionPointReports,
+  useHideCollectionPoint,
+} from '../../src/features/collection-points/hooks';
 import { useAdminFeedback, type FeedbackEntry } from '../../src/features/feedback/hooks';
 import { formatDate, formatDateTime } from '../../src/utils/format';
 
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou. Entre novamente.';
 
-type AdminSection = 'metrics' | 'feedback';
+type AdminSection = 'metrics' | 'feedback' | 'reports';
 
 const SECTIONS: { key: AdminSection; label: string }[] = [
   { key: 'metrics', label: 'Métricas' },
   { key: 'feedback', label: 'Feedback' },
+  { key: 'reports', label: 'Denúncias' },
 ];
+
+const REPORT_REASON_LABELS: Record<string, string> = {
+  inappropriate: 'Conteúdo impróprio',
+  incorrect: 'Informação incorreta',
+  closed: 'Local não existe ou fechou',
+  duplicate: 'Ponto repetido',
+  other: 'Outro motivo',
+};
 
 export default function AdminScreen() {
   const [session, setSession] = useState<AdminSession | null>(null);
@@ -253,8 +266,14 @@ function AdminPanel({
           onUnauthorized={onUnauthorized}
           onAuthorized={onAuthorized}
         />
-      ) : (
+      ) : section === 'feedback' ? (
         <AdminFeedback
+          session={session}
+          onUnauthorized={onUnauthorized}
+          onAuthorized={onAuthorized}
+        />
+      ) : (
+        <AdminReports
           session={session}
           onUnauthorized={onUnauthorized}
           onAuthorized={onAuthorized}
@@ -442,6 +461,110 @@ function AdminFeedback({
   );
 }
 
+function AdminReports({
+  session,
+  onUnauthorized,
+  onAuthorized,
+}: {
+  session: AdminSession;
+  onUnauthorized: () => void;
+  onAuthorized: () => void;
+}) {
+  const reports = useCollectionPointReports(session.idToken);
+  const hidePoint = useHideCollectionPoint(session.idToken);
+
+  useEffect(() => {
+    if (reports.isUnauthorized) onUnauthorized();
+  }, [reports.isUnauthorized, onUnauthorized]);
+
+  useEffect(() => {
+    if (reports.isSuccess) onAuthorized();
+  }, [reports.isSuccess, onAuthorized]);
+
+  if (reports.isPending) return <LoadingState label="Carregando denúncias..." />;
+
+  if (reports.isError) {
+    return (
+      <ErrorState
+        title="Não foi possível carregar as denúncias"
+        description="Verifique sua conexão ou entre novamente."
+        onRetry={() => void reports.refetch()}
+      />
+    );
+  }
+
+  if (reports.items.length === 0) {
+    return (
+      <EmptyState
+        title="Nenhuma denúncia"
+        description="Quando alguém denunciar um ponto pelo app, ela aparece aqui."
+      />
+    );
+  }
+
+  return (
+    <>
+      <Text variant="caption" color="textMuted" accessibilityLiveRegion="polite">
+        {reports.items.length === 1 ? '1 denúncia' : `${reports.items.length} denúncias`}
+      </Text>
+
+      {reports.items.map((report) => (
+        <Card key={report.id} testID={`report-${report.id}`}>
+          <View style={styles.feedbackHeader}>
+            <Text variant="bodyStrong">{REPORT_REASON_LABELS[report.reason] ?? report.reason}</Text>
+            <Text variant="caption" color="textMuted">
+              {formatDateTime(report.reportedAt)}
+            </Text>
+          </View>
+
+          <Text variant="body" color="textSecondary">
+            Ponto: {report.pointName}
+          </Text>
+
+          {report.details ? (
+            <Text variant="body" color="textSecondary">
+              {report.details}
+            </Text>
+          ) : null}
+
+          {/* Denúncia sem ação é denúncia ignorada; a política pede que se aja
+              em tempo razoável. Ocultar é idempotente no backend. */}
+          <Button
+            label={
+              hidePoint.isSuccess && hidePoint.variables === report.pointId
+                ? 'Ponto ocultado'
+                : 'Ocultar ponto'
+            }
+            variant="secondary"
+            disabled={hidePoint.isSuccess && hidePoint.variables === report.pointId}
+            loading={hidePoint.isPending && hidePoint.variables === report.pointId}
+            onPress={() => hidePoint.mutate(report.pointId)}
+            style={styles.reportAction}
+            testID={`button-hide-${report.pointId}`}
+            accessibilityHint="Tira o ponto de coleta do ar"
+          />
+        </Card>
+      ))}
+
+      {hidePoint.isError ? (
+        <Text variant="body" color="danger" accessibilityLiveRegion="assertive">
+          Não foi possível ocultar o ponto. Tente novamente.
+        </Text>
+      ) : null}
+
+      {reports.hasNextPage ? (
+        <Button
+          label="Carregar mais"
+          variant="secondary"
+          onPress={() => void reports.fetchNextPage()}
+          loading={reports.isFetchingNextPage}
+          testID="button-load-more-reports"
+        />
+      ) : null}
+    </>
+  );
+}
+
 function FeedbackCard({ entry }: { entry: FeedbackEntry }) {
   return (
     <Card testID={`feedback-${entry.id}`}>
@@ -497,6 +620,9 @@ const styles = StyleSheet.create({
   periodSelector: {
     flexDirection: 'row',
     gap: spacing.sm,
+  },
+  reportAction: {
+    marginTop: spacing.md,
   },
   feedbackHeader: {
     flexDirection: 'row',

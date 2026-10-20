@@ -136,6 +136,20 @@ anterior. O passado não tem fim, então uma única requisição caminha no máx
 para sempre. Feedback mais antigo que isso continua na tabela, só não aparece na
 listagem.
 
+### 6. Denúncia de ponto
+
+```text
+PK = REPORT#<AAAA-MM>
+SK = AT#<ISO-8601>#<id>
+```
+
+Atributos: `entityType`, `reportId`, `pointId`, `pointName`, `reason`, `details`
+e `reportedAt`. Mesmo desenho do feedback, mesma leitura caminhando mês a mês —
+os dois usam o mesmo `readMonthlyPartitions`.
+
+`pointName` é copiado no momento da denúncia para que a fila de moderação seja
+legível sem uma leitura por item. **Nada sobre quem denunciou é gravado.**
+
 ## Access patterns
 
 | Access pattern                 | Estratégia                                                                                          | Operação                    |
@@ -150,6 +164,8 @@ listagem.
 | Consultar métricas por período | um `Query` por mês do período, `SK BETWEEN`                                                            | `Query` × meses (≤ 13)      |
 | Registrar feedback             | `PK = FEEDBACK#<mês>`, `SK = AT#<instante>#<id>`, com `attribute_not_exists`                            | `PutItem`                   |
 | Ler feedback (administrativo)  | `PK = FEEDBACK#<mês>` em ordem decrescente, caminhando para o mês anterior enquanto a página não enche    | `Query` × meses (≤ 12)      |
+| Registrar denúncia             | `PK = REPORT#<mês>`, `SK = AT#<instante>#<id>`, com `attribute_not_exists`                               | `PutItem`                   |
+| Ler denúncias (administrativo) | `PK = REPORT#<mês>` em ordem decrescente, mesma caminhada mensal                                         | `Query` × meses (≤ 12)      |
 
 **Nenhum caminho de leitura usa `Scan`.** Há um teste que verifica isso
 (`tests/infrastructure/dynamo-collection-point-repository.test.ts`).

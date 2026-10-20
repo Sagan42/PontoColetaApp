@@ -41,6 +41,7 @@ variable "public_routes" {
     "GET /v1/collection-points/{id}",
     "POST /v1/metrics/events",
     "POST /v1/feedback",
+    "POST /v1/collection-points/{id}/reports",
   ]
 }
 
@@ -50,6 +51,7 @@ variable "admin_routes" {
   default = [
     "GET /v1/admin/metrics",
     "GET /v1/admin/feedback",
+    "GET /v1/admin/reports",
     "POST /v1/admin/collection-points/{id}/hide",
     "POST /v1/admin/collection-points/{id}/publish",
   ]
@@ -82,6 +84,10 @@ variable "route_throttling" {
     "POST /v1/collection-points" = { rate_limit = 1, burst_limit = 5 }
     "POST /v1/metrics/events"    = { rate_limit = 1, burst_limit = 5 }
     "POST /v1/feedback"          = { rate_limit = 1, burst_limit = 3 }
+
+    # Denunciar e escrever feedback sao o mesmo gesto do ponto de vista do
+    # custo: uma pessoa, um toque. O limite existe para o laco automatizado.
+    "POST /v1/collection-points/{id}/reports" = { rate_limit = 1, burst_limit = 3 }
   }
 }
 

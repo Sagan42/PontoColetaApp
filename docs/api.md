@@ -44,8 +44,10 @@ Stack traces nunca são expostos.
 | POST   | `/v1/collection-points`        | pública      | cadastro                                       |
 | POST   | `/v1/metrics/events`           | pública      | registra `app_open` ou `point_viewed`          |
 | POST   | `/v1/feedback`                 | pública      | feedback de quem usa o app                     |
+| POST   | `/v1/collection-points/{id}/reports` | pública | denuncia um ponto de coleta                    |
 | GET    | `/v1/admin/metrics`            | **JWT**      | métricas agregadas                             |
 | GET    | `/v1/admin/feedback`           | **JWT**      | lê os feedbacks, do mais recente ao mais antigo |
+| GET    | `/v1/admin/reports`            | **JWT**      | lê as denúncias, da mais recente à mais antiga  |
 | POST   | `/v1/admin/collection-points/{id}/hide`    | **JWT** | tira o ponto do ar                     |
 | POST   | `/v1/admin/collection-points/{id}/publish` | **JWT** | devolve o ponto ao ar                  |
 
@@ -180,6 +182,39 @@ authorization: Bearer <IdToken>
 página seguinte. A leitura caminha mês a mês para trás, por até 12 meses em uma
 mesma requisição; `nextCursor` nulo encerra a listagem.
 
+### Denunciar um ponto
+
+```http
+POST /v1/collection-points/<id>/reports
+content-type: application/json
+
+{
+  "reason": "inappropriate",
+  "details": "O nome do local tem conteúdo ofensivo."
+}
+```
+
+`202`, sem corpo útil: a denúncia foi recebida e uma pessoa vai olhar. Não há
+recurso para quem denunciou consultar depois.
+
+`reason` é obrigatório e vem de uma lista fechada: `inappropriate`, `incorrect`,
+`closed`, `duplicate`, `other`. `details` é opcional, até 500 caracteres.
+Denunciar não exige cadastro e **nada sobre quem denunciou é guardado**.
+
+Ponto inexistente responde `404`, para que ids inventados não encham a fila de
+moderação. Um ponto já oculto continua denunciável.
+
+Ler as denúncias exige token de administrador:
+
+```http
+GET /v1/admin/reports?limit=20
+authorization: Bearer <IdToken>
+```
+
+`200` com a lista da mais recente à mais antiga e `meta.nextCursor`. Cada item
+traz `pointId`, `pointName` copiado no momento da denúncia, `reason`, `details`
+e `reportedAt`. A ação sobre a denúncia é o `hide` do ciclo de vida do ponto.
+
 ### Métricas administrativas
 
 ```http
@@ -269,6 +304,7 @@ Limites impostos pelo backend:
 | Observações                 | 500 caracteres           |
 | Nome no feedback            | 60 caracteres (opcional) |
 | Mensagem do feedback        | 3–1000 caracteres        |
+| Detalhes da denúncia        | 500 caracteres (opcional)|
 | `limit`                     | 1–100 (padrão 50)        |
 | `radiusKm`                  | até 20 km efetivos       |
 | Período de métricas         | até 366 dias             |

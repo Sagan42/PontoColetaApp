@@ -131,6 +131,11 @@ repositório real), `FakeGeocodingService`, `InMemoryMetricsRepository`,
   404 de endereço inexistente, detalhes, lista vazia, métricas públicas
   (incluindo a recusa de um tipo que só o backend pode contar) e a área
   administrativa (401 sem token, 403 sem `sub`, 200 com token).
+- **`reports-api.test.ts`** — denúncia anônima e sem cadastro, motivo fora da
+  lista recusado, detalhes saneados como qualquer texto livre, **404 para ponto
+  inexistente**, ponto já oculto continua denunciável, a resposta não ecoa o
+  texto; na leitura, 401 sem token, 403 sem `sub`, paginação por cursor e a ação
+  de ocultar fechando o ciclo.
 - **`feedback-api.test.ts`** — nome opcional virando `Anônimo`, data e hora do
   servidor, limites recusados, campos inventados pelo cliente ignorados
   (`id`, `author` e `submittedAt` não são aceitos de fora), a resposta **não**
@@ -156,10 +161,15 @@ repositório real), `FakeGeocodingService`, `InMemoryMetricsRepository`,
 - **`FeedbackScreen.test.tsx`** / **`feedbackForm.test.ts`** — mensagem
   obrigatória e nome opcional; envio com e sem nome; **três toques enviam uma
   única vez**; 429 explicado como limite de taxa, não como erro de quem escreveu.
+- **`ReportScreen.test.tsx`** — motivo obrigatório, envio com e sem detalhes,
+  apenas o último motivo escolhido vale, **três toques enviam uma única vez**,
+  404 e 429 explicados sem culpar quem denunciou.
 - **`AdminScreen.test.tsx`** — além da sessão: a seção de feedback **não** é
   consultada enquanto as métricas estão abertas, a lista mostra autor e
   instante, o vazio é explicado, "carregar mais" só aparece havendo próxima
   página, e um 401 na leitura de feedback também dispara a renovação da sessão.
+  Na aba de denúncias: motivo, ponto e instante na tela, e **ocultar o ponto
+  denunciado** com o token da sessão.
 - **`ResultsScreen.test.tsx`** — os quatro estados (carregando, sucesso, vazio,
   erro); lista com nome, endereço, materiais e distância; alternância
   lista ↔ mapa sobre o mesmo conjunto; abertura dos detalhes; mensagem

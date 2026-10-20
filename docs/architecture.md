@@ -151,7 +151,8 @@ mobile/
 │   ├── point/[id].tsx        detalhes
 │   ├── new-point.tsx         cadastro
 │   ├── feedback.tsx          feedback (nome opcional + mensagem)
-│   └── admin/index.tsx       login + métricas + feedbacks recebidos
+│   ├── report/[id].tsx       denúncia de um ponto de coleta
+│   └── admin/index.tsx       login + métricas + feedbacks + denúncias
 └── src/
     ├── design-system/        tokens + componentes
     ├── features/             collection-points, feedback, admin

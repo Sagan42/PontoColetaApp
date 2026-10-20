@@ -18,6 +18,7 @@ build foi gerada e nenhuma conta foi configurada — isso depende do proprietár
 | Permissões bloqueadas       | `android.blockedPermissions`                  | localização fina e grosseira                      |
 | Perfis de build             | `eas.json`                                    | development, preview (APK), production (**AAB**)  |
 | Anúncios                    | —                                             | **não existem**; nenhum SDK de publicidade        |
+| Denúncia de conteúdo        | tela de detalhes do ponto → "Denunciar"       | exigida pela política de conteúdo do utilizador   |
 | Chave do Google Maps        | `app.config.js` → `android.config.googleMaps` | variável `GOOGLE_MAPS_ANDROID_API_KEY`            |
 | Base da política de privacidade | [`privacy.md`](privacy.md)                | conteúdo pronto para publicar                     |
 
@@ -139,6 +140,22 @@ Baseado no comportamento real do app:
 > Sem anúncios, a seção **Ads** do questionário é respondida com "o app não
 > contém anúncios" e a permissão `com.google.android.gms.permission.AD_ID` não
 > precisa ser declarada — é a declaração mais simples possível.
+
+## Conteúdo gerado pelo utilizador
+
+Os pontos de coleta são escritos por quem usa o app e publicados sem revisão
+prévia, então a política de **Conteúdo Gerado pelo Utilizador** se aplica. O que
+ela exige e onde está:
+
+| Exigência | Onde |
+| --- | --- |
+| Denunciar conteúdo, dentro do app | Botão "Denunciar este ponto" na tela de detalhes |
+| Agir sobre a denúncia | Aba **Denúncias** da área administrativa, com ação de ocultar |
+| Bloquear utilizadores | **Não aplicável**: o app não tem conta, perfil nem interação 1:1 |
+
+No questionário de classificação, isso muda a resposta de "capacidade de
+denunciar utilizadores ou conteúdos gerados pelos utilizadores" para **Sim**.
+Mudança de funcionalidade que afeta o questionário exige reenviá-lo.
 
 ## Antes do primeiro envio
 

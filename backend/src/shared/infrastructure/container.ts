@@ -1,10 +1,13 @@
 import { CreateCollectionPoint } from '../../modules/collection-points/application/use-cases/create-collection-point.js';
 import { GetCollectionPoint } from '../../modules/collection-points/application/use-cases/get-collection-point.js';
 import { HideCollectionPoint } from '../../modules/collection-points/application/use-cases/hide-collection-point.js';
+import { ListCollectionPointReports } from '../../modules/collection-points/application/use-cases/list-collection-point-reports.js';
 import { ListCollectionPoints } from '../../modules/collection-points/application/use-cases/list-collection-points.js';
 import { PublishCollectionPoint } from '../../modules/collection-points/application/use-cases/publish-collection-point.js';
+import { ReportCollectionPoint } from '../../modules/collection-points/application/use-cases/report-collection-point.js';
 import { SearchCollectionPointsByLocation } from '../../modules/collection-points/application/use-cases/search-collection-points-by-location.js';
 import { SearchCollectionPointsByMaterial } from '../../modules/collection-points/application/use-cases/search-collection-points-by-material.js';
+import { DynamoCollectionPointReportRepository } from '../../modules/collection-points/infrastructure/dynamodb/dynamo-collection-point-report-repository.js';
 import { DynamoCollectionPointRepository } from '../../modules/collection-points/infrastructure/dynamodb/dynamo-collection-point-repository.js';
 import { NominatimGeocodingService } from '../../modules/collection-points/infrastructure/geocoding/nominatim-geocoding-service.js';
 import { UsageMetricRecorderAdapter } from '../../modules/collection-points/infrastructure/metrics/usage-metric-recorder-adapter.js';
@@ -45,6 +48,10 @@ export function createContainer(environment: Environment = loadEnvironment()): C
   );
   const metricsRepository = new DynamoMetricsRepository(documentClient, environment.TABLE_NAME);
   const feedbackRepository = new DynamoFeedbackRepository(documentClient, environment.TABLE_NAME);
+  const reportRepository = new DynamoCollectionPointReportRepository(
+    documentClient,
+    environment.TABLE_NAME,
+  );
 
   const registerUsageMetric = new RegisterUsageMetric(metricsRepository, systemClock);
   const metricRecorder = new UsageMetricRecorderAdapter(registerUsageMetric);
@@ -83,10 +90,17 @@ export function createContainer(environment: Environment = loadEnvironment()): C
         metricRecorder,
         logger,
       ),
+      reportCollectionPoint: new ReportCollectionPoint(
+        collectionPointRepository,
+        reportRepository,
+        uuidGenerator,
+        systemClock,
+      ),
     },
     adminCollectionPoints: {
       hideCollectionPoint: new HideCollectionPoint(collectionPointRepository, systemClock),
       publishCollectionPoint: new PublishCollectionPoint(collectionPointRepository, systemClock),
+      listReports: new ListCollectionPointReports(reportRepository, systemClock),
     },
     registerUsageMetric,
     getUsageMetrics: new GetUsageMetrics(metricsRepository, systemClock),

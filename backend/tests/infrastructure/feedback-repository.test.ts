@@ -3,9 +3,9 @@ import { describe, expect, it, vi } from 'vitest';
 import { Feedback } from '../../src/modules/feedback/domain/feedback.js';
 import {
   DynamoFeedbackRepository,
-  previousMonth,
   toFeedback,
 } from '../../src/modules/feedback/infrastructure/dynamodb/dynamo-feedback-repository.js';
+import { previousMonth } from '../../src/shared/infrastructure/dynamodb/monthly-reader.js';
 
 function stubClient(responses: unknown[] = []) {
   const sent: { name: string; input: Record<string, unknown> }[] = [];

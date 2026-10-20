@@ -1,8 +1,10 @@
 import { CreateCollectionPoint } from '../../src/modules/collection-points/application/use-cases/create-collection-point.js';
 import { GetCollectionPoint } from '../../src/modules/collection-points/application/use-cases/get-collection-point.js';
 import { HideCollectionPoint } from '../../src/modules/collection-points/application/use-cases/hide-collection-point.js';
+import { ListCollectionPointReports } from '../../src/modules/collection-points/application/use-cases/list-collection-point-reports.js';
 import { ListCollectionPoints } from '../../src/modules/collection-points/application/use-cases/list-collection-points.js';
 import { PublishCollectionPoint } from '../../src/modules/collection-points/application/use-cases/publish-collection-point.js';
+import { ReportCollectionPoint } from '../../src/modules/collection-points/application/use-cases/report-collection-point.js';
 import { SearchCollectionPointsByLocation } from '../../src/modules/collection-points/application/use-cases/search-collection-points-by-location.js';
 import { SearchCollectionPointsByMaterial } from '../../src/modules/collection-points/application/use-cases/search-collection-points-by-material.js';
 import { registerAdminCollectionPointRoutes } from '../../src/modules/collection-points/presentation/admin-collection-point-routes.js';
@@ -24,6 +26,7 @@ import { Router, ok, toHttpResponse } from '../../src/shared/presentation/http/i
 import {
   FakeGeocodingService,
   FixedClock,
+  InMemoryCollectionPointReportRepository,
   InMemoryCollectionPointRepository,
   InMemoryFeedbackRepository,
   InMemoryMetricsRepository,
@@ -44,6 +47,7 @@ export interface TestApi {
   repository: InMemoryCollectionPointRepository;
   metricsRepository: InMemoryMetricsRepository;
   feedbackRepository: InMemoryFeedbackRepository;
+  reportRepository: InMemoryCollectionPointReportRepository;
   geocoding: FakeGeocodingService;
   recorder: RecordingMetricRecorder;
   logs: RecordedLog[];
@@ -58,6 +62,7 @@ export function buildTestApi(now = new Date('2026-08-22T12:00:00.000Z')): TestAp
   const repository = new InMemoryCollectionPointRepository();
   const metricsRepository = new InMemoryMetricsRepository();
   const feedbackRepository = new InMemoryFeedbackRepository();
+  const reportRepository = new InMemoryCollectionPointReportRepository();
   const geocoding = new FakeGeocodingService();
   const recorder = new RecordingMetricRecorder();
   const clock = new FixedClock(now);
@@ -84,6 +89,12 @@ export function buildTestApi(now = new Date('2026-08-22T12:00:00.000Z')): TestAp
       recorder,
       silentLogger,
     ),
+    reportCollectionPoint: new ReportCollectionPoint(
+      repository,
+      reportRepository,
+      new SequentialIdGenerator('report'),
+      clock,
+    ),
   });
 
   registerAdminCollectionPointRoutes(
@@ -91,6 +102,7 @@ export function buildTestApi(now = new Date('2026-08-22T12:00:00.000Z')): TestAp
     {
       hideCollectionPoint: new HideCollectionPoint(repository, clock),
       publishCollectionPoint: new PublishCollectionPoint(repository, clock),
+      listReports: new ListCollectionPointReports(reportRepository, clock),
     },
     silentLogger,
   );
@@ -109,6 +121,7 @@ export function buildTestApi(now = new Date('2026-08-22T12:00:00.000Z')): TestAp
     repository,
     metricsRepository,
     feedbackRepository,
+    reportRepository,
     geocoding,
     recorder,
     logs: infos,

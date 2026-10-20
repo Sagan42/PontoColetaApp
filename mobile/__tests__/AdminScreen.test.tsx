@@ -166,12 +166,39 @@ const feedbackEntry = {
   submittedAt: '2026-10-19T15:30:00.000Z',
 };
 
-/** Responde por caminho: o painel consulta métricas e feedback em rotas distintas. */
-function answerByPath(feedback: unknown[] = [], nextCursor: string | null = null) {
+const reportEntry = {
+  id: 'report-1',
+  pointId: 'point-9',
+  pointName: 'Ecoponto Centro',
+  reason: 'inappropriate',
+  details: 'Nome ofensivo.',
+  reportedAt: '2026-10-19T15:30:00.000Z',
+};
+
+/** Responde por caminho: cada aba do painel consulta uma rota distinta. */
+function answerByPath(
+  options: {
+    feedback?: unknown[];
+    reports?: unknown[];
+    nextCursor?: string | null;
+  } = {},
+) {
   apiRequestMock.mockImplementation((path: string) => {
     if (path === '/v1/admin/metrics') return Promise.resolve({ data: report }) as never;
     if (path === '/v1/admin/feedback') {
-      return Promise.resolve({ data: feedback, meta: { nextCursor } }) as never;
+      return Promise.resolve({
+        data: options.feedback ?? [],
+        meta: { nextCursor: options.nextCursor ?? null },
+      }) as never;
+    }
+    if (path === '/v1/admin/reports') {
+      return Promise.resolve({
+        data: options.reports ?? [],
+        meta: { nextCursor: options.nextCursor ?? null },
+      }) as never;
+    }
+    if (path.endsWith('/hide')) {
+      return Promise.resolve({ data: { id: 'point-9', status: 'HIDDEN' } }) as never;
     }
     return Promise.reject(new Error(`caminho inesperado: ${path}`)) as never;
   });
@@ -186,7 +213,7 @@ describe('Admin feedback', () => {
 
   it('does not read feedback while the metrics section is open', async () => {
     signInAdminMock.mockResolvedValue(session());
-    answerByPath([feedbackEntry]);
+    answerByPath({ feedback: [feedbackEntry] });
 
     const view = await renderAndSignIn();
     await view.findByLabelText('Acessos: 120');
@@ -196,7 +223,7 @@ describe('Admin feedback', () => {
 
   it('shows the feedback with its author and instant, using the session token', async () => {
     signInAdminMock.mockResolvedValue(session());
-    answerByPath([feedbackEntry]);
+    answerByPath({ feedback: [feedbackEntry] });
 
     const view = await renderAndSignIn();
     await view.findByLabelText('Acessos: 120');
@@ -214,7 +241,7 @@ describe('Admin feedback', () => {
 
   it('says so when nobody has written yet', async () => {
     signInAdminMock.mockResolvedValue(session());
-    answerByPath([]);
+    answerByPath();
 
     const view = await renderAndSignIn();
     await view.findByLabelText('Acessos: 120');
@@ -226,7 +253,7 @@ describe('Admin feedback', () => {
 
   it('offers more only when there is another page', async () => {
     signInAdminMock.mockResolvedValue(session());
-    answerByPath([feedbackEntry], 'cursor-2');
+    answerByPath({ feedback: [feedbackEntry], nextCursor: 'cursor-2' });
 
     const view = await renderAndSignIn();
     await view.findByLabelText('Acessos: 120');
@@ -234,6 +261,50 @@ describe('Admin feedback', () => {
     await fireEvent.press(view.getByTestId('admin-section-feedback'));
 
     expect(await view.findByTestId('button-load-more-feedback')).toBeVisible();
+  });
+
+  it('shows a report with its reason, point and instant', async () => {
+    signInAdminMock.mockResolvedValue(session());
+    answerByPath({ reports: [reportEntry] });
+
+    const view = await renderAndSignIn();
+    await view.findByLabelText('Acessos: 120');
+
+    await fireEvent.press(view.getByTestId('admin-section-reports'));
+
+    expect(await view.findByText('Conteúdo impróprio')).toBeVisible();
+    expect(view.getByText('Ponto: Ecoponto Centro')).toBeVisible();
+    expect(view.getByText('Nome ofensivo.')).toBeVisible();
+    expect(view.getByText('19/10/2026 às 12:30')).toBeVisible();
+  });
+
+  it('says so when there is no report', async () => {
+    signInAdminMock.mockResolvedValue(session());
+    answerByPath();
+
+    const view = await renderAndSignIn();
+    await view.findByLabelText('Acessos: 120');
+
+    await fireEvent.press(view.getByTestId('admin-section-reports'));
+
+    expect(await view.findByText('Nenhuma denúncia')).toBeVisible();
+  });
+
+  it('takes the reported point off the air with the session token', async () => {
+    signInAdminMock.mockResolvedValue(session());
+    answerByPath({ reports: [reportEntry] });
+
+    const view = await renderAndSignIn();
+    await view.findByLabelText('Acessos: 120');
+    await fireEvent.press(view.getByTestId('admin-section-reports'));
+
+    await fireEvent.press(await view.findByTestId('button-hide-point-9'));
+
+    expect(await view.findByText('Ponto ocultado')).toBeVisible();
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      '/v1/admin/collection-points/point-9/hide',
+      expect.objectContaining({ method: 'POST', token: 'id-1' }),
+    );
   });
 
   it('renews the session on a 401 from the feedback route', async () => {

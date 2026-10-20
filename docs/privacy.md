@@ -81,6 +81,21 @@ Quem escrever o próprio nome está, por definição, fornecendo um dado pessoal
 voluntariamente. Para apagar um feedback enviado, use o contato da ficha da Play
 Store.
 
+### 5. Denúncia de um ponto (só se alguém denunciar)
+
+Quem vir algo errado em um ponto de coleta pode denunciá-lo pelo app. Guardamos
+o motivo escolhido, os detalhes opcionais, o ponto denunciado e a data e a hora.
+
+- **Nada sobre quem denunciou é guardado** — sem nome, sem contato, sem IP, sem
+  identificador. Denúncia que identifica quem denunciou é denúncia que ninguém
+  faz.
+- Não é preciso cadastro nem login para denunciar.
+- A leitura é só da área administrativa, protegida por login.
+
+Finalidade: tirar do ar informação errada ou conteúdo impróprio, que é o que a
+política de conteúdo gerado pelo utilizador exige de quem publica o que outras
+pessoas escrevem.
+
 ## Localização
 
 **GPS nunca é obrigatório e o app não o solicita.** As permissões de localização

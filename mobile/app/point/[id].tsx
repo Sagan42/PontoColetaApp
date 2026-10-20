@@ -1,4 +1,4 @@
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect } from 'react';
 import { Linking, StyleSheet, View } from 'react-native';
 import {
@@ -17,6 +17,7 @@ import { reportMetric } from '../../src/services/metrics';
 import { formatDistance } from '../../src/utils/format';
 
 export default function CollectionPointDetailsScreen() {
+  const router = useRouter();
   const params = useLocalSearchParams<{ id?: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
   const query = useCollectionPoint(id);
@@ -114,6 +115,18 @@ export default function CollectionPointDetailsScreen() {
           accessibilityHint="Abre a localização no aplicativo de mapas do aparelho"
         />
       </Card>
+
+      {/* Qualquer pessoa pode cadastrar um ponto, então qualquer pessoa precisa
+          poder avisar que há algo errado com ele. */}
+      <Button
+        label="Denunciar este ponto"
+        variant="ghost"
+        onPress={() =>
+          router.push({ pathname: '/report/[id]', params: { id: point.id, name: point.name } })
+        }
+        testID="button-report-point"
+        accessibilityHint="Abre o formulário para denunciar informação errada ou conteúdo impróprio"
+      />
     </Screen>
   );
 }

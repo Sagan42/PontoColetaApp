@@ -17,6 +17,12 @@ import type {
   GeocodingService,
 } from '../../src/modules/collection-points/application/ports/geocoding-service.js';
 import type { UsageMetricRecorder } from '../../src/modules/collection-points/application/ports/usage-metric-recorder.js';
+import type { CollectionPointReport } from '../../src/modules/collection-points/domain/collection-point-report.js';
+import type {
+  CollectionPointReportRepository,
+  ReportPage,
+  ReportPageRequest,
+} from '../../src/modules/collection-points/domain/repositories/collection-point-report-repository.js';
 import type { Feedback } from '../../src/modules/feedback/domain/feedback.js';
 import type {
   FeedbackPage,
@@ -204,6 +210,33 @@ export class InMemoryMetricsRepository implements MetricsRepository {
       .filter((day) => this.counters.has(day.value))
       .map((day) => DailyUsageMetrics.restore(day, this.counters.get(day.value) ?? {}));
     return Promise.resolve(metrics);
+  }
+}
+
+export class InMemoryCollectionPointReportRepository
+  implements CollectionPointReportRepository
+{
+  readonly saved: CollectionPointReport[] = [];
+
+  save(report: CollectionPointReport): Promise<void> {
+    this.saved.push(report);
+    return Promise.resolve();
+  }
+
+  /** Mais recente primeiro, com o índice do próximo item como cursor. */
+  findRecent(request: ReportPageRequest): Promise<ReportPage> {
+    const newestFirst = [...this.saved].sort(
+      (left, right) => right.reportedAt.getTime() - left.reportedAt.getTime(),
+    );
+
+    const offset = Number(request.cursor ?? '0');
+    const items = newestFirst.slice(offset, offset + request.limit);
+    const next = offset + items.length;
+
+    return Promise.resolve({
+      items,
+      nextCursor: next < newestFirst.length ? String(next) : null,
+    });
   }
 }
 

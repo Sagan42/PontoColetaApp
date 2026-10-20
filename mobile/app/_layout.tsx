@@ -48,6 +48,7 @@ export default function RootLayout() {
             <Stack.Screen name="point/[id]" options={{ title: 'Ponto de coleta' }} />
             <Stack.Screen name="new-point" options={{ title: 'Cadastrar ponto' }} />
             <Stack.Screen name="feedback" options={{ title: 'Feedback' }} />
+            <Stack.Screen name="report/[id]" options={{ title: 'Denunciar ponto' }} />
             <Stack.Screen name="admin/index" options={{ title: 'Métricas' }} />
           </Stack>
 

@@ -3,8 +3,10 @@ import { useMemo } from 'react';
 import { ApiError } from '../../services/apiClient';
 import {
   collectionPointsApi,
+  type CollectionPointReport,
   type CollectionPointsResult,
   type CreateCollectionPointPayload,
+  type ReportCollectionPointPayload,
 } from './api';
 
 /** A 4xx will not get better by asking again; anything else gets two tries. */
@@ -93,6 +95,49 @@ export function useSuggestedMaterials() {
     queryKey: collectionPointKeys.materials,
     queryFn: ({ signal }) => collectionPointsApi.listSuggestedMaterials(signal),
     staleTime: 24 * 60 * 60 * 1000,
+  });
+}
+
+export function useReportCollectionPoint() {
+  return useMutation({
+    mutationFn: (payload: ReportCollectionPointPayload) => collectionPointsApi.report(payload),
+    retry: false,
+  });
+}
+
+/** Denúncias recebidas, só com token de administrador. */
+export function useCollectionPointReports(token: string | null) {
+  const query = useInfiniteQuery({
+    queryKey: [...collectionPointKeys.all, 'reports', token],
+    enabled: Boolean(token),
+    initialPageParam: null as string | null,
+    queryFn: ({ pageParam, signal }): Promise<ReportsPage> =>
+      collectionPointsApi.listReports(token ?? '', pageParam, signal),
+    getNextPageParam: (lastPage: ReportsPage) => lastPage.nextCursor,
+    retry: false,
+  });
+
+  const isUnauthorized = query.error instanceof ApiError && query.error.status === 401;
+  const items: CollectionPointReport[] = query.data?.pages.flatMap((page) => page.items) ?? [];
+
+  return { ...query, items, isUnauthorized, isError: query.isError && !isUnauthorized };
+}
+
+interface ReportsPage {
+  items: CollectionPointReport[];
+  nextCursor: string | null;
+}
+
+/** Tira o ponto do ar. É a ação que fecha o ciclo de uma denúncia. */
+export function useHideCollectionPoint(token: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (pointId: string) => collectionPointsApi.hide(pointId, token ?? ''),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: collectionPointKeys.all });
+    },
+    retry: false,
   });
 }
 

@@ -40,6 +40,7 @@ variable "public_routes" {
     "GET /v1/collection-points/nearby",
     "GET /v1/collection-points/{id}",
     "POST /v1/metrics/events",
+    "POST /v1/feedback",
   ]
 }
 
@@ -48,6 +49,7 @@ variable "admin_routes" {
   type        = list(string)
   default = [
     "GET /v1/admin/metrics",
+    "GET /v1/admin/feedback",
     "POST /v1/admin/collection-points/{id}/hide",
     "POST /v1/admin/collection-points/{id}/publish",
   ]
@@ -70,7 +72,8 @@ variable "admin_jwt_audience" {
 # Writes cost more than reads downstream: a point creation is a transactional
 # write plus a geocoding call, and a metric event writes on every app open. They
 # get a tighter ceiling than the stage default so a flood of writes cannot ride
-# in under the overall rate.
+# in under the overall rate. Feedback is typed by hand by a person, so 1 rps
+# with a burst of 3 is generous for the real use and hostile to a bot loop.
 variable "route_throttling" {
   description = "Per-route throttling on top of default_route_settings, keyed by route key."
   type        = map(object({ rate_limit = number, burst_limit = number }))
@@ -78,6 +81,7 @@ variable "route_throttling" {
   default = {
     "POST /v1/collection-points" = { rate_limit = 1, burst_limit = 5 }
     "POST /v1/metrics/events"    = { rate_limit = 1, burst_limit = 5 }
+    "POST /v1/feedback"          = { rate_limit = 1, burst_limit = 3 }
   }
 }
 

@@ -107,6 +107,13 @@ repositório real), `FakeGeocodingService`, `InMemoryMetricsRepository`,
   `Scan`**.
 - **`metrics-and-pagination.test.ts`** — cursor opaco (round-trip e rejeição de
   cursor adulterado), meses de um período, `ADD` atômico, um `Query` por mês.
+- **`feedback.test.ts`** (domínio) — saneamento do texto: controles, marcas de
+  largura zero e override de direção caem; parágrafos sobrevivem; o limite é
+  medido **depois** do saneamento, e mensagem só de invisíveis conta como vazia.
+- **`feedback-repository.test.ts`** — escrita na partição do mês sem atributo de
+  GSI; leitura em ordem decrescente que continua no mês anterior, pede só o que
+  falta para a página, retoma de onde parou dentro do mês e **para** depois de
+  uma janela limitada de meses vazios.
 - **`nominatim-geocoding-service.test.ts`** — `fetch` mockado: a URL restringe a
   busca à área de atendimento, o `User-Agent` exigido pela política é enviado,
   resultados inválidos são descartados, o cache evita a segunda chamada, e
@@ -124,6 +131,12 @@ repositório real), `FakeGeocodingService`, `InMemoryMetricsRepository`,
   404 de endereço inexistente, detalhes, lista vazia, métricas públicas
   (incluindo a recusa de um tipo que só o backend pode contar) e a área
   administrativa (401 sem token, 403 sem `sub`, 200 com token).
+- **`feedback-api.test.ts`** — nome opcional virando `Anônimo`, data e hora do
+  servidor, limites recusados, campos inventados pelo cliente ignorados
+  (`id`, `author` e `submittedAt` não são aceitos de fora), a resposta **não**
+  ecoa o texto e o log **não** contém o conteúdo. Na leitura: **401 sem token,
+  403 sem `sub`**, 200 para o administrador, paginação por cursor opaco e
+  recusa de `limit` fora da faixa.
 
 ## Mobile
 
@@ -138,6 +151,15 @@ repositório real), `FakeGeocodingService`, `InMemoryMetricsRepository`,
   retangular leva à busca; cadastro e área administrativa seguem acessíveis.
 - **`SearchScreen.test.tsx`** — **as duas** formas de busca; cada uma navega com
   os parâmetros certos; busca vazia não navega e explica o porquê.
+- **`FeedbackFab.test.tsx`** — o botão flutuante aparece, navega, e se esconde na
+  própria tela de feedback.
+- **`FeedbackScreen.test.tsx`** / **`feedbackForm.test.ts`** — mensagem
+  obrigatória e nome opcional; envio com e sem nome; **três toques enviam uma
+  única vez**; 429 explicado como limite de taxa, não como erro de quem escreveu.
+- **`AdminScreen.test.tsx`** — além da sessão: a seção de feedback **não** é
+  consultada enquanto as métricas estão abertas, a lista mostra autor e
+  instante, o vazio é explicado, "carregar mais" só aparece havendo próxima
+  página, e um 401 na leitura de feedback também dispara a renovação da sessão.
 - **`ResultsScreen.test.tsx`** — os quatro estados (carregando, sucesso, vazio,
   erro); lista com nome, endereço, materiais e distância; alternância
   lista ↔ mapa sobre o mesmo conjunto; abertura dos detalhes; mensagem

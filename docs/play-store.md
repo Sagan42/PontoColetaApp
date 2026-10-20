@@ -128,12 +128,13 @@ Baseado no comportamento real do app:
 
 | Pergunta                                | Resposta                                                                 |
 | --------------------------------------- | ------------------------------------------------------------------------ |
-| Coleta dados pessoais?                  | Não.                                                                     |
+| Coleta dados pessoais?                  | Só **nome**, **opcional**, se a pessoa escrever um no feedback.          |
+| Coleta conteúdo escrito pela pessoa?    | Sim: a mensagem do feedback e os dados de um ponto cadastrado.           |
 | Coleta localização?                     | Não. As permissões de localização estão bloqueadas.                      |
 | Coleta identificadores?                 | Não. Sem SDK de publicidade, sem `AD_ID` no manifesto.                   |
 | Dados são compartilhados com terceiros? | Endereço digitado vai ao provedor de geocodificação, sem identificação.  |
 | Dados trafegam criptografados?          | Sim, HTTPS.                                                              |
-| É possível excluir dados?               | Não há conta a excluir. Correção/remoção de um ponto pelo contato do app.|
+| É possível excluir dados?               | Não há conta a excluir. Remoção de um ponto ou de um feedback pelo contato do app.|
 
 > Sem anúncios, a seção **Ads** do questionário é respondida com "o app não
 > contém anúncios" e a permissão `com.google.android.gms.permission.AD_ID` não

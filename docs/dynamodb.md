@@ -114,6 +114,28 @@ Atributos: `entityType`, `date` e um contador numérico por tipo de evento
 `point_viewed`), incrementados com `ADD` — atômico entre invocações
 concorrentes. Eventos individuais **nunca** são armazenados.
 
+### 5. Feedback
+
+```text
+PK = FEEDBACK#<AAAA-MM>
+SK = AT#<ISO-8601>#<id>
+```
+
+Atributos: `entityType`, `feedbackId`, `author` (`Anônimo` quando não informado),
+`message` e `submittedAt`. Partição por mês pelo mesmo motivo das métricas: a
+contagem de itens por partição não cresce para sempre. A chave de ordenação
+começa pelo instante, então ler um mês já sai em ordem cronológica.
+
+Não grava atributo de GSI nenhum: os dois índices são esparsos, logo o feedback
+fica fora dos dois e não custa escrita de índice.
+
+A leitura é só da área administrativa e caminha para trás: consulta o mês
+corrente em ordem decrescente e, se a página não encheu, segue para o mês
+anterior. O passado não tem fim, então uma única requisição caminha no máximo
+**12 meses** — sem esse teto, uma listagem de meses vazios consultaria partições
+para sempre. Feedback mais antigo que isso continua na tabela, só não aparece na
+listagem.
+
 ## Access patterns
 
 | Access pattern                 | Estratégia                                                                                          | Operação                    |
@@ -126,6 +148,8 @@ concorrentes. Eventos individuais **nunca** são armazenados.
 | Cadastrar ponto                | ponto + itens de material + item de unicidade com `attribute_not_exists`                               | `TransactWriteItems`        |
 | Registrar métrica              | `PK = METRICS#<mês>`, `SK = DATE#<dia>`, `ADD <tipo> :1`                                                | `UpdateItem`                |
 | Consultar métricas por período | um `Query` por mês do período, `SK BETWEEN`                                                            | `Query` × meses (≤ 13)      |
+| Registrar feedback             | `PK = FEEDBACK#<mês>`, `SK = AT#<instante>#<id>`, com `attribute_not_exists`                            | `PutItem`                   |
+| Ler feedback (administrativo)  | `PK = FEEDBACK#<mês>` em ordem decrescente, caminhando para o mês anterior enquanto a página não enche    | `Query` × meses (≤ 12)      |
 
 **Nenhum caminho de leitura usa `Scan`.** Há um teste que verifica isso
 (`tests/infrastructure/dynamo-collection-point-repository.test.ts`).

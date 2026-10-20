@@ -17,6 +17,12 @@ import type {
   GeocodingService,
 } from '../../src/modules/collection-points/application/ports/geocoding-service.js';
 import type { UsageMetricRecorder } from '../../src/modules/collection-points/application/ports/usage-metric-recorder.js';
+import type { Feedback } from '../../src/modules/feedback/domain/feedback.js';
+import type {
+  FeedbackPage,
+  FeedbackPageRequest,
+  FeedbackRepository,
+} from '../../src/modules/feedback/domain/repositories/feedback-repository.js';
 import { Coordinates } from '../../src/modules/collection-points/domain/value-objects/coordinates.js';
 import {
   DailyUsageMetrics,
@@ -42,9 +48,11 @@ export class FixedClock implements Clock {
 export class SequentialIdGenerator implements IdGenerator {
   private counter = 0;
 
+  constructor(private readonly prefix = 'point') {}
+
   generate(): string {
     this.counter += 1;
-    return `point-${this.counter}`;
+    return `${this.prefix}-${this.counter}`;
   }
 }
 
@@ -196,5 +204,30 @@ export class InMemoryMetricsRepository implements MetricsRepository {
       .filter((day) => this.counters.has(day.value))
       .map((day) => DailyUsageMetrics.restore(day, this.counters.get(day.value) ?? {}));
     return Promise.resolve(metrics);
+  }
+}
+
+export class InMemoryFeedbackRepository implements FeedbackRepository {
+  readonly saved: Feedback[] = [];
+
+  save(feedback: Feedback): Promise<void> {
+    this.saved.push(feedback);
+    return Promise.resolve();
+  }
+
+  /** Mais recente primeiro, com o índice do próximo item como cursor. */
+  findRecent(request: FeedbackPageRequest): Promise<FeedbackPage> {
+    const newestFirst = [...this.saved].sort(
+      (left, right) => right.submittedAt.getTime() - left.submittedAt.getTime(),
+    );
+
+    const offset = Number(request.cursor ?? '0');
+    const items = newestFirst.slice(offset, offset + request.limit);
+    const next = offset + items.length;
+
+    return Promise.resolve({
+      items,
+      nextCursor: next < newestFirst.length ? String(next) : null,
+    });
   }
 }

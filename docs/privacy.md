@@ -10,7 +10,8 @@ O app **não exibe anúncios** e não embarca nenhum SDK de publicidade.
 ## O que NÃO é coletado
 
 ```text
-nome, e-mail ou telefone de quem usa o app
+e-mail ou telefone de quem usa o app
+nome, exceto se a pessoa escolher escrever um no feedback
 conta ou cadastro de usuário comum
 localização GPS do dispositivo
 identificador de dispositivo, publicitário ou de instalação
@@ -58,6 +59,27 @@ virar coordenadas.
 - Não é registrado em log.
 - Fica em cache **em memória** do container Lambda por até 1 hora, sem qualquer
   vínculo com quem digitou, apenas para não repetir chamadas ao provedor.
+
+### 4. Feedback (só se a pessoa escrever um)
+
+A tela de feedback tem dois campos: **nome, opcional**, e **mensagem**. Guardamos
+o que foi escrito mais a data e a hora do envio, geradas pelo servidor.
+
+- Em branco, o nome é gravado como `Anônimo`. Não há pergunta implícita: não
+  pedimos e-mail, telefone nem forma de contato.
+- Nada mais acompanha o registro — sem IP, sem identificador de dispositivo,
+  sem vínculo com as buscas feitas antes ou depois.
+- O conteúdo nunca vai para log, e a rota de envio não devolve o texto na
+  resposta.
+- Ler o que foi escrito exige **login administrativo**: a rota de leitura fica
+  na API administrativa, protegida por token do Cognito, como as métricas e a
+  moderação. Não existe rota pública que devolva feedback.
+
+Finalidade: corrigir e melhorar o app a partir de quem o usa.
+
+Quem escrever o próprio nome está, por definição, fornecendo um dado pessoal
+voluntariamente. Para apagar um feedback enviado, use o contato da ficha da Play
+Store.
 
 ## Localização
 
@@ -110,12 +132,13 @@ de concorrência, limites de taxa na API e alarmes de orçamento. Ver
 
 ## Direitos e contato
 
-Como não há dado pessoal de usuário comum, não existe conta a excluir nem
-histórico a exportar.
+Não existe conta a excluir nem histórico a exportar: não há cadastro de usuário.
+O único dado pessoal possível é um nome escrito voluntariamente no feedback.
 
 Para pedir correção ou remoção de um **ponto de coleta** — por exemplo, se o
 local fechou, os dados estão errados ou uma informação inadequada foi cadastrada
-— o contato é o do responsável pelo aplicativo, publicado na ficha da Play Store.
+— ou a remoção de um **feedback** já enviado, o contato é o do responsável pelo
+aplicativo, publicado na ficha da Play Store.
 
 ## Política de privacidade da Play Store
 
@@ -123,7 +146,8 @@ A Google exige uma URL pública de política de privacidade. Ela ainda **não
 existe** — depende do proprietário e de um domínio. O conteúdo deve declarar,
 no mínimo:
 
-1. quais dados o app coleta (contadores agregados; dados de pontos de coleta);
+1. quais dados o app coleta (contadores agregados; dados de pontos de coleta;
+   feedback com nome opcional);
 2. quais não coleta (nada que identifique pessoas; sem GPS; sem identificador
    de publicidade);
 3. a finalidade de cada coleta;

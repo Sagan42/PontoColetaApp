@@ -1,5 +1,6 @@
 import {
   formatDate,
+  formatDateTime,
   formatDistance,
   formatMaterialList,
   formatShortDate,
@@ -46,5 +47,19 @@ describe('date formatting', () => {
 
   it('formats a short date for the chart axis', () => {
     expect(formatShortDate('2026-08-22')).toBe('22/08');
+  });
+});
+
+describe('formatDateTime', () => {
+  it('shows date and hour in Londrina time', () => {
+    expect(formatDateTime('2026-10-19T15:30:00.000Z')).toBe('19/10/2026 às 12:30');
+  });
+
+  it('crosses the day backwards when UTC is already past midnight', () => {
+    expect(formatDateTime('2026-10-19T01:15:00.000Z')).toBe('18/10/2026 às 22:15');
+  });
+
+  it('gives back what it cannot parse', () => {
+    expect(formatDateTime('nao-e-data')).toBe('nao-e-data');
   });
 });

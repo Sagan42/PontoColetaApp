@@ -74,7 +74,8 @@ HTTP, Terraform, Expo nem React Native.
 backend/src/
 ├── modules/
 │   ├── collection-points/    domain · application · infrastructure · presentation
-│   └── metrics/              domain · application · infrastructure · presentation
+│   ├── metrics/              domain · application · infrastructure · presentation
+│   └── feedback/             domain · application · infrastructure · presentation
 ├── shared/
 │   ├── domain/               erros, geohash, Haversine, normalização de texto
 │   ├── application/          portas Clock, IdGenerator, Logger
@@ -149,10 +150,11 @@ mobile/
 │   ├── results.tsx           resultados (lista ↔ mapa)
 │   ├── point/[id].tsx        detalhes
 │   ├── new-point.tsx         cadastro
-│   └── admin/index.tsx       login + métricas
+│   ├── feedback.tsx          feedback (nome opcional + mensagem)
+│   └── admin/index.tsx       login + métricas + feedbacks recebidos
 └── src/
     ├── design-system/        tokens + componentes
-    ├── features/             collection-points, admin
+    ├── features/             collection-points, feedback, admin
     ├── services/             apiClient, config, metrics
     ├── schemas/              validação de formulário (zod)
     └── utils/                formatação pt-BR

@@ -43,7 +43,9 @@ Stack traces nunca são expostos.
 | GET    | `/v1/collection-points/{id}`   | pública      | detalhes                                       |
 | POST   | `/v1/collection-points`        | pública      | cadastro                                       |
 | POST   | `/v1/metrics/events`           | pública      | registra `app_open` ou `point_viewed`          |
+| POST   | `/v1/feedback`                 | pública      | feedback de quem usa o app                     |
 | GET    | `/v1/admin/metrics`            | **JWT**      | métricas agregadas                             |
+| GET    | `/v1/admin/feedback`           | **JWT**      | lê os feedbacks, do mais recente ao mais antigo |
 | POST   | `/v1/admin/collection-points/{id}/hide`    | **JWT** | tira o ponto do ar                     |
 | POST   | `/v1/admin/collection-points/{id}/publish` | **JWT** | devolve o ponto ao ar                  |
 
@@ -149,6 +151,35 @@ O backend geocodifica o endereço e é a fonte de verdade das coordenadas. Se o
 app enviar `latitude`/`longitude`, elas só são usadas quando estão a menos de
 1 km do endereço geocodificado.
 
+### Enviar feedback
+
+```http
+POST /v1/feedback
+content-type: application/json
+
+{
+  "name": "Pedro",
+  "message": "Faltou um ponto de coleta no Cafezal."
+}
+```
+
+`201` com apenas o comprovante — `{ "id": "...", "submittedAt": "..." }`. A
+resposta não devolve o texto enviado.
+
+`name` é opcional (`null` ou ausente grava como `Anônimo`); `submittedAt` é do
+servidor, nunca do cliente.
+
+Ler o que foi escrito exige token de administrador:
+
+```http
+GET /v1/admin/feedback?limit=20
+authorization: Bearer <IdToken>
+```
+
+`200` com a lista do mais recente ao mais antigo e `meta.nextCursor` para a
+página seguinte. A leitura caminha mês a mês para trás, por até 12 meses em uma
+mesma requisição; `nextCursor` nulo encerra a listagem.
+
 ### Métricas administrativas
 
 ```http
@@ -236,6 +267,8 @@ Limites impostos pelo backend:
 | Materiais                   | 1–10, 2–40 caracteres    |
 | Horário                     | 120 caracteres           |
 | Observações                 | 500 caracteres           |
+| Nome no feedback            | 60 caracteres (opcional) |
+| Mensagem do feedback        | 3–1000 caracteres        |
 | `limit`                     | 1–100 (padrão 50)        |
 | `radiusKm`                  | até 20 km efetivos       |
 | Período de métricas         | até 366 dias             |

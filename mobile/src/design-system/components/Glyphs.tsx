@@ -34,6 +34,20 @@ export function ListGlyph() {
   );
 }
 
+/**
+ * Folha: um quadrado com dois cantos opostos arredondados e girado 45°. Os
+ * dois cantos que sobram viram as pontas.
+ */
+export function LeafGlyph({ tone = 'primary' }: { tone?: 'primary' | 'inverse' }) {
+  return (
+    <View style={styles.glyph} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View
+        style={[styles.leaf, tone === 'inverse' ? styles.leafInverse : null]}
+      />
+    </View>
+  );
+}
+
 export function SearchGlyph() {
   return (
     <View style={styles.glyph} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
@@ -83,6 +97,17 @@ const styles = StyleSheet.create({
   },
   lineShort: {
     width: 9,
+  },
+  leaf: {
+    width: 15,
+    height: 15,
+    backgroundColor: colors.primary,
+    borderTopLeftRadius: 15,
+    borderBottomRightRadius: 15,
+    transform: [{ rotate: '-45deg' }],
+  },
+  leafInverse: {
+    backgroundColor: colors.textInverse,
   },
   lens: {
     width: 15,

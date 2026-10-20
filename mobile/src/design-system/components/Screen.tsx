@@ -3,6 +3,9 @@ import { Keyboard, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, spacing } from '../tokens';
 
+/** Altura do botão flutuante mais folga, reservada no fim de cada tela. */
+export const FAB_CLEARANCE = 80;
+
 export interface ScreenProps {
   children: React.ReactNode;
   scrollable?: boolean;
@@ -93,7 +96,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.xxl,
+    // Espaço reservado para o botão flutuante de feedback, que paira sobre
+    // qualquer tela: sem isto ele cobriria o fim do conteúdo.
+    paddingBottom: FAB_CLEARANCE,
     gap: spacing.lg,
   },
 });

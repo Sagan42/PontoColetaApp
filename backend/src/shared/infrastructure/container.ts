@@ -10,6 +10,9 @@ import { NominatimGeocodingService } from '../../modules/collection-points/infra
 import { UsageMetricRecorderAdapter } from '../../modules/collection-points/infrastructure/metrics/usage-metric-recorder-adapter.js';
 import type { AdminCollectionPointUseCases } from '../../modules/collection-points/presentation/admin-collection-point-routes.js';
 import type { CollectionPointUseCases } from '../../modules/collection-points/presentation/collection-point-routes.js';
+import { ListFeedback } from '../../modules/feedback/application/use-cases/list-feedback.js';
+import { SubmitFeedback } from '../../modules/feedback/application/use-cases/submit-feedback.js';
+import { DynamoFeedbackRepository } from '../../modules/feedback/infrastructure/dynamodb/dynamo-feedback-repository.js';
 import { GetUsageMetrics } from '../../modules/metrics/application/use-cases/get-usage-metrics.js';
 import { RegisterUsageMetric } from '../../modules/metrics/application/use-cases/register-usage-metric.js';
 import { DynamoMetricsRepository } from '../../modules/metrics/infrastructure/dynamodb/dynamo-metrics-repository.js';
@@ -25,6 +28,8 @@ export interface Container {
   readonly adminCollectionPoints: AdminCollectionPointUseCases;
   readonly registerUsageMetric: RegisterUsageMetric;
   readonly getUsageMetrics: GetUsageMetrics;
+  readonly submitFeedback: SubmitFeedback;
+  readonly listFeedback: ListFeedback;
 }
 
 export function createContainer(environment: Environment = loadEnvironment()): Container {
@@ -39,6 +44,7 @@ export function createContainer(environment: Environment = loadEnvironment()): C
     logger,
   );
   const metricsRepository = new DynamoMetricsRepository(documentClient, environment.TABLE_NAME);
+  const feedbackRepository = new DynamoFeedbackRepository(documentClient, environment.TABLE_NAME);
 
   const registerUsageMetric = new RegisterUsageMetric(metricsRepository, systemClock);
   const metricRecorder = new UsageMetricRecorderAdapter(registerUsageMetric);
@@ -84,5 +90,7 @@ export function createContainer(environment: Environment = loadEnvironment()): C
     },
     registerUsageMetric,
     getUsageMetrics: new GetUsageMetrics(metricsRepository, systemClock),
+    submitFeedback: new SubmitFeedback(feedbackRepository, uuidGenerator, systemClock),
+    listFeedback: new ListFeedback(feedbackRepository, systemClock),
   };
 }

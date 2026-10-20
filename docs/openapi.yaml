@@ -29,6 +29,7 @@ tags:
   - name: Pontos de coleta
   - name: Materiais
   - name: Métricas
+  - name: Feedback
   - name: Administração
   - name: Operação
 
@@ -347,6 +348,118 @@ paths:
                         type: boolean
         '400':
           $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/feedback:
+    post:
+      tags: [Feedback]
+      summary: Envia um feedback sobre o app
+      description: |
+        O nome é opcional: ausente, `null` ou em branco é gravado como `Anônimo`.
+        A data e a hora são do servidor, não do cliente. A resposta devolve
+        apenas o comprovante — nunca o texto enviado — e não existe rota de
+        leitura: o feedback só é lido direto na tabela.
+      operationId: submitFeedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                name:
+                  type: string
+                  maxLength: 60
+                  nullable: true
+                message:
+                  type: string
+                  minLength: 3
+                  maxLength: 1000
+      responses:
+        '201':
+          description: Feedback registrado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      submittedAt:
+                        type: string
+                        format: date-time
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/admin/feedback:
+    get:
+      tags: [Administração]
+      summary: Lê os feedbacks enviados pelo app
+      description: |
+        Requer o token do único acesso administrativo. Do mais recente ao mais
+        antigo, com `meta.nextCursor` para a página seguinte. A leitura caminha
+        mês a mês para trás, por até 12 meses em uma mesma requisição; cursor
+        nulo encerra a listagem.
+      operationId: listFeedback
+      security:
+        - adminJwt: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+        - name: cursor
+          in: query
+          required: false
+          description: Cursor opaco devolvido em `meta.nextCursor`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Feedbacks, do mais recente ao mais antigo
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id:
+                          type: string
+                        author:
+                          type: string
+                          description: '`Anônimo` quando quem escreveu não se identificou.'
+                        message:
+                          type: string
+                        submittedAt:
+                          type: string
+                          format: date-time
+                  meta:
+                    type: object
+                    properties:
+                      nextCursor:
+                        type: string
+                        nullable: true
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/AdminUnauthorized'
+        '403':
+          $ref: '#/components/responses/AdminForbidden'
         '500':
           $ref: '#/components/responses/InternalError'
 

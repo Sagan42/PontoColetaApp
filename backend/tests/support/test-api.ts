@@ -7,6 +7,12 @@ import { SearchCollectionPointsByLocation } from '../../src/modules/collection-p
 import { SearchCollectionPointsByMaterial } from '../../src/modules/collection-points/application/use-cases/search-collection-points-by-material.js';
 import { registerAdminCollectionPointRoutes } from '../../src/modules/collection-points/presentation/admin-collection-point-routes.js';
 import { registerCollectionPointRoutes } from '../../src/modules/collection-points/presentation/collection-point-routes.js';
+import { ListFeedback } from '../../src/modules/feedback/application/use-cases/list-feedback.js';
+import { SubmitFeedback } from '../../src/modules/feedback/application/use-cases/submit-feedback.js';
+import {
+  registerAdminFeedbackRoutes,
+  registerFeedbackRoutes,
+} from '../../src/modules/feedback/presentation/feedback-routes.js';
 import { GetUsageMetrics } from '../../src/modules/metrics/application/use-cases/get-usage-metrics.js';
 import { RegisterUsageMetric } from '../../src/modules/metrics/application/use-cases/register-usage-metric.js';
 import {
@@ -19,6 +25,7 @@ import {
   FakeGeocodingService,
   FixedClock,
   InMemoryCollectionPointRepository,
+  InMemoryFeedbackRepository,
   InMemoryMetricsRepository,
   RecordingMetricRecorder,
   SequentialIdGenerator,
@@ -36,6 +43,7 @@ export interface TestApi {
   request(method: string, path: string, options?: TestRequestOptions): Promise<TestResponse>;
   repository: InMemoryCollectionPointRepository;
   metricsRepository: InMemoryMetricsRepository;
+  feedbackRepository: InMemoryFeedbackRepository;
   geocoding: FakeGeocodingService;
   recorder: RecordingMetricRecorder;
   logs: RecordedLog[];
@@ -49,6 +57,7 @@ export interface TestResponse {
 export function buildTestApi(now = new Date('2026-08-22T12:00:00.000Z')): TestApi {
   const repository = new InMemoryCollectionPointRepository();
   const metricsRepository = new InMemoryMetricsRepository();
+  const feedbackRepository = new InMemoryFeedbackRepository();
   const geocoding = new FakeGeocodingService();
   const recorder = new RecordingMetricRecorder();
   const clock = new FixedClock(now);
@@ -89,9 +98,17 @@ export function buildTestApi(now = new Date('2026-08-22T12:00:00.000Z')): TestAp
   registerPublicMetricsRoutes(router, new RegisterUsageMetric(metricsRepository, clock));
   registerAdminMetricsRoutes(router, new GetUsageMetrics(metricsRepository, clock));
 
+  registerFeedbackRoutes(
+    router,
+    new SubmitFeedback(feedbackRepository, new SequentialIdGenerator('feedback'), clock),
+    silentLogger,
+  );
+  registerAdminFeedbackRoutes(router, new ListFeedback(feedbackRepository, clock));
+
   return {
     repository,
     metricsRepository,
+    feedbackRepository,
     geocoding,
     recorder,
     logs: infos,

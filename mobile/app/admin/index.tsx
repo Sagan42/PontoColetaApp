@@ -3,6 +3,7 @@ import { Pressable, StyleSheet, View } from 'react-native';
 import {
   Button,
   Card,
+  EmptyState,
   ErrorState,
   LoadingState,
   Screen,
@@ -25,13 +26,24 @@ import {
   signInAdmin,
   type AdminSession,
 } from '../../src/features/admin/auth';
-import { formatDate } from '../../src/utils/format';
+import { useAdminFeedback, type FeedbackEntry } from '../../src/features/feedback/hooks';
+import { formatDate, formatDateTime } from '../../src/utils/format';
 
 const SESSION_EXPIRED_MESSAGE = 'Sua sessão expirou. Entre novamente.';
+
+type AdminSection = 'metrics' | 'feedback';
+
+const SECTIONS: { key: AdminSection; label: string }[] = [
+  { key: 'metrics', label: 'Métricas' },
+  { key: 'feedback', label: 'Feedback' },
+];
 
 export default function AdminScreen() {
   const [session, setSession] = useState<AdminSession | null>(null);
   const [days, setDays] = useState<MetricPeriodDays>(30);
+  // A seção vive aqui, acima do painel: o painel desmonta enquanto a sessão é
+  // renovada, e quem estava lendo feedback deve voltar para o feedback.
+  const [section, setSection] = useState<AdminSection>('metrics');
   const [signedOutMessage, setSignedOutMessage] = useState<string | null>(null);
   const renewalsSinceLastSuccess = useRef(0);
 
@@ -98,8 +110,10 @@ export default function AdminScreen() {
   }
 
   return (
-    <AdminMetrics
+    <AdminPanel
       session={session}
+      section={section}
+      onChangeSection={setSection}
       days={days}
       onChangeDays={setDays}
       onUnauthorized={handleUnauthorized}
@@ -186,6 +200,70 @@ function AdminLogin({
   );
 }
 
+/**
+ * As duas seções do painel. Cada uma monta a própria consulta, então abrir
+ * métricas não busca feedback e vice-versa.
+ */
+function AdminPanel({
+  session,
+  section,
+  onChangeSection,
+  days,
+  onChangeDays,
+  onUnauthorized,
+  onAuthorized,
+}: {
+  session: AdminSession;
+  section: AdminSection;
+  onChangeSection: (section: AdminSection) => void;
+  days: MetricPeriodDays;
+  onChangeDays: (days: MetricPeriodDays) => void;
+  onUnauthorized: () => void;
+  onAuthorized: () => void;
+}) {
+  return (
+    <Screen scrollable>
+      <View style={styles.sectionSelector} accessibilityRole="tablist">
+        {SECTIONS.map((option) => {
+          const selected = option.key === section;
+
+          return (
+            <Pressable
+              key={option.key}
+              onPress={() => onChangeSection(option.key)}
+              accessibilityRole="tab"
+              accessibilityState={{ selected }}
+              accessibilityLabel={option.label}
+              style={[styles.sectionOption, selected ? styles.sectionOptionSelected : null]}
+              testID={`admin-section-${option.key}`}
+            >
+              <Text variant="bodyStrong" color={selected ? 'primaryDark' : 'textSecondary'}>
+                {option.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {section === 'metrics' ? (
+        <AdminMetrics
+          session={session}
+          days={days}
+          onChangeDays={onChangeDays}
+          onUnauthorized={onUnauthorized}
+          onAuthorized={onAuthorized}
+        />
+      ) : (
+        <AdminFeedback
+          session={session}
+          onUnauthorized={onUnauthorized}
+          onAuthorized={onAuthorized}
+        />
+      )}
+    </Screen>
+  );
+}
+
 function AdminMetrics({
   session,
   days,
@@ -210,7 +288,7 @@ function AdminMetrics({
   }, [metrics.isSuccess, onAuthorized]);
 
   return (
-    <Screen scrollable>
+    <>
       <View style={styles.periodSelector} accessibilityRole="radiogroup">
         {METRIC_PERIODS.map((option) => {
           const selected = option === days;
@@ -297,7 +375,86 @@ function AdminMetrics({
           </Card>
         </>
       ) : null}
-    </Screen>
+    </>
+  );
+}
+
+function AdminFeedback({
+  session,
+  onUnauthorized,
+  onAuthorized,
+}: {
+  session: AdminSession;
+  onUnauthorized: () => void;
+  onAuthorized: () => void;
+}) {
+  const feedback = useAdminFeedback(session.idToken);
+
+  useEffect(() => {
+    if (feedback.isUnauthorized) onUnauthorized();
+  }, [feedback.isUnauthorized, onUnauthorized]);
+
+  useEffect(() => {
+    if (feedback.isSuccess) onAuthorized();
+  }, [feedback.isSuccess, onAuthorized]);
+
+  if (feedback.isPending) return <LoadingState label="Carregando feedbacks..." />;
+
+  if (feedback.isError) {
+    return (
+      <ErrorState
+        title="Não foi possível carregar os feedbacks"
+        description="Verifique sua conexão ou entre novamente."
+        onRetry={() => void feedback.refetch()}
+      />
+    );
+  }
+
+  if (feedback.items.length === 0) {
+    return (
+      <EmptyState
+        title="Nenhum feedback ainda"
+        description="Quando alguém escrever pelo botão do app, a mensagem aparece aqui."
+      />
+    );
+  }
+
+  return (
+    <>
+      <Text variant="caption" color="textMuted" accessibilityLiveRegion="polite">
+        {feedback.items.length === 1 ? '1 feedback' : `${feedback.items.length} feedbacks`}
+      </Text>
+
+      {feedback.items.map((entry) => (
+        <FeedbackCard key={entry.id} entry={entry} />
+      ))}
+
+      {feedback.hasNextPage ? (
+        <Button
+          label="Carregar mais"
+          variant="secondary"
+          onPress={() => void feedback.fetchNextPage()}
+          loading={feedback.isFetchingNextPage}
+          testID="button-load-more-feedback"
+        />
+      ) : null}
+    </>
+  );
+}
+
+function FeedbackCard({ entry }: { entry: FeedbackEntry }) {
+  return (
+    <Card testID={`feedback-${entry.id}`}>
+      <View style={styles.feedbackHeader}>
+        <Text variant="bodyStrong">{entry.author}</Text>
+        <Text variant="caption" color="textMuted">
+          {formatDateTime(entry.submittedAt)}
+        </Text>
+      </View>
+      <Text variant="body" color="textSecondary">
+        {entry.message}
+      </Text>
+    </Card>
   );
 }
 
@@ -319,10 +476,34 @@ const styles = StyleSheet.create({
     paddingTop: spacing.lg,
     gap: spacing.xs,
   },
-  periodSelector: {
+  sectionSelector: {
     flexDirection: 'row',
     gap: spacing.sm,
     paddingTop: spacing.md,
+  },
+  sectionOption: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    backgroundColor: colors.surfaceMuted,
+  },
+  sectionOptionSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.surface,
+  },
+  periodSelector: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  feedbackHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginBottom: spacing.xs,
   },
   periodOption: {
     flex: 1,

@@ -1,7 +1,15 @@
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { EmptyState, ErrorState, LoadingState, Screen, Text, spacing } from '../src/design-system';
+import {
+  EmptyState,
+  ErrorState,
+  FAB_CLEARANCE,
+  LoadingState,
+  Screen,
+  Text,
+  spacing,
+} from '../src/design-system';
 import { CollectionPointCard } from '../src/features/collection-points/components/CollectionPointCard';
 import { CollectionPointsMap } from '../src/features/collection-points/components/CollectionPointsMap';
 import {
@@ -154,6 +162,6 @@ const styles = StyleSheet.create({
   },
   list: {
     gap: spacing.md,
-    paddingBottom: spacing.xxl,
+    paddingBottom: FAB_CLEARANCE,
   },
 });

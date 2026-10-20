@@ -158,3 +158,98 @@ describe('Admin session', () => {
     expect(refreshAdminSessionMock).not.toHaveBeenCalled();
   });
 });
+
+const feedbackEntry = {
+  id: 'feedback-1',
+  author: 'Pedro',
+  message: 'Faltou um ponto no Cafezal.',
+  submittedAt: '2026-10-19T15:30:00.000Z',
+};
+
+/** Responde por caminho: o painel consulta métricas e feedback em rotas distintas. */
+function answerByPath(feedback: unknown[] = [], nextCursor: string | null = null) {
+  apiRequestMock.mockImplementation((path: string) => {
+    if (path === '/v1/admin/metrics') return Promise.resolve({ data: report }) as never;
+    if (path === '/v1/admin/feedback') {
+      return Promise.resolve({ data: feedback, meta: { nextCursor } }) as never;
+    }
+    return Promise.reject(new Error(`caminho inesperado: ${path}`)) as never;
+  });
+}
+
+describe('Admin feedback', () => {
+  beforeEach(() => {
+    signInAdminMock.mockReset();
+    refreshAdminSessionMock.mockReset();
+    apiRequestMock.mockReset();
+  });
+
+  it('does not read feedback while the metrics section is open', async () => {
+    signInAdminMock.mockResolvedValue(session());
+    answerByPath([feedbackEntry]);
+
+    const view = await renderAndSignIn();
+    await view.findByLabelText('Acessos: 120');
+
+    expect(apiRequestMock).not.toHaveBeenCalledWith('/v1/admin/feedback', expect.anything());
+  });
+
+  it('shows the feedback with its author and instant, using the session token', async () => {
+    signInAdminMock.mockResolvedValue(session());
+    answerByPath([feedbackEntry]);
+
+    const view = await renderAndSignIn();
+    await view.findByLabelText('Acessos: 120');
+
+    await fireEvent.press(view.getByTestId('admin-section-feedback'));
+
+    expect(await view.findByText('Faltou um ponto no Cafezal.')).toBeVisible();
+    expect(view.getByText('Pedro')).toBeVisible();
+    expect(view.getByText('19/10/2026 às 12:30')).toBeVisible();
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      '/v1/admin/feedback',
+      expect.objectContaining({ token: 'id-1' }),
+    );
+  });
+
+  it('says so when nobody has written yet', async () => {
+    signInAdminMock.mockResolvedValue(session());
+    answerByPath([]);
+
+    const view = await renderAndSignIn();
+    await view.findByLabelText('Acessos: 120');
+
+    await fireEvent.press(view.getByTestId('admin-section-feedback'));
+
+    expect(await view.findByText('Nenhum feedback ainda')).toBeVisible();
+  });
+
+  it('offers more only when there is another page', async () => {
+    signInAdminMock.mockResolvedValue(session());
+    answerByPath([feedbackEntry], 'cursor-2');
+
+    const view = await renderAndSignIn();
+    await view.findByLabelText('Acessos: 120');
+
+    await fireEvent.press(view.getByTestId('admin-section-feedback'));
+
+    expect(await view.findByTestId('button-load-more-feedback')).toBeVisible();
+  });
+
+  it('renews the session on a 401 from the feedback route', async () => {
+    signInAdminMock.mockResolvedValue(session());
+    refreshAdminSessionMock.mockResolvedValue(renewed());
+    apiRequestMock.mockImplementation((path: string) => {
+      if (path === '/v1/admin/metrics') return Promise.resolve({ data: report }) as never;
+      return Promise.reject(new ApiError('UNAUTHORIZED', 'Token inválido.', 401)) as never;
+    });
+
+    const view = await renderAndSignIn();
+    await view.findByLabelText('Acessos: 120');
+
+    await fireEvent.press(view.getByTestId('admin-section-feedback'));
+
+    expect(await view.findByText('Sua sessão expirou. Entre novamente.')).toBeVisible();
+    expect(refreshAdminSessionMock).toHaveBeenCalledTimes(1);
+  });
+});

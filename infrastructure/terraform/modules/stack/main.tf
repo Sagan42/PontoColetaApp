@@ -9,15 +9,20 @@ locals {
 
   artifacts_dir = "${path.root}/../../../../backend/dist/lambdas"
 
-  common_environment_variables = {
-    ENVIRONMENT          = var.environment
-    TABLE_NAME           = module.dynamodb.table_name
-    LOG_LEVEL            = var.log_level
-    GEOCODING_PROVIDER   = "nominatim"
-    GEOCODING_BASE_URL   = var.geocoding_base_url
-    GEOCODING_USER_AGENT = var.geocoding_user_agent
-    GEOCODING_TIMEOUT_MS = tostring(var.geocoding_timeout_ms)
-  }
+  common_environment_variables = merge(
+    {
+      ENVIRONMENT          = var.environment
+      TABLE_NAME           = module.dynamodb.table_name
+      LOG_LEVEL            = var.log_level
+      GEOCODING_PROVIDER   = var.geocoding_provider
+      GEOCODING_BASE_URL   = var.geocoding_base_url
+      GEOCODING_USER_AGENT = var.geocoding_user_agent
+      GEOCODING_TIMEOUT_MS = tostring(var.geocoding_timeout_ms)
+    },
+    # So entra quando existe: a Lambda recusa subir com o provedor google e a
+    # chave vazia, entao mandar a variavel em branco seria pior que nao mandar.
+    var.geocoding_api_key == "" ? {} : { GEOCODING_API_KEY = var.geocoding_api_key }
+  )
 }
 
 module "dynamodb" {

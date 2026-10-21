@@ -6,17 +6,14 @@ import type {
 } from '../../application/ports/geocoding-service.js';
 import { SERVICE_AREA } from '../../domain/service-area.js';
 import { Coordinates } from '../../domain/value-objects/coordinates.js';
+import { realTimers, type GeocodingTimers } from './timers.js';
+
+export { realTimers, type GeocodingTimers };
 
 export interface NominatimOptions {
   readonly baseUrl: string;
   readonly userAgent: string;
   readonly timeoutMs: number;
-}
-
-/** Injectable so tests do not have to spend real seconds on the rate limiter. */
-export interface GeocodingTimers {
-  readonly now: () => number;
-  readonly wait: (ms: number) => Promise<void>;
 }
 
 interface NominatimPlace {
@@ -42,14 +39,6 @@ const RETRY_BACKOFF_MS = 250;
 const MIN_ATTEMPT_BUDGET_MS = 250;
 
 const PROVIDER_UNAVAILABLE = 'Não foi possível consultar o serviço de endereços. Tente novamente.';
-
-export const realTimers: GeocodingTimers = {
-  now: () => Date.now(),
-  wait: (ms) =>
-    new Promise((resolve) => {
-      setTimeout(resolve, ms);
-    }),
-};
 
 export class NominatimGeocodingService implements GeocodingService {
   private readonly cache = new Map<string, { expiresAt: number; results: GeocodingResult[] }>();

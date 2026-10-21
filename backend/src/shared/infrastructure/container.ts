@@ -9,6 +9,8 @@ import { SearchCollectionPointsByLocation } from '../../modules/collection-point
 import { SearchCollectionPointsByMaterial } from '../../modules/collection-points/application/use-cases/search-collection-points-by-material.js';
 import { DynamoCollectionPointReportRepository } from '../../modules/collection-points/infrastructure/dynamodb/dynamo-collection-point-report-repository.js';
 import { DynamoCollectionPointRepository } from '../../modules/collection-points/infrastructure/dynamodb/dynamo-collection-point-repository.js';
+import type { GeocodingService } from '../../modules/collection-points/application/ports/geocoding-service.js';
+import { GoogleGeocodingService } from '../../modules/collection-points/infrastructure/geocoding/google-geocoding-service.js';
 import { NominatimGeocodingService } from '../../modules/collection-points/infrastructure/geocoding/nominatim-geocoding-service.js';
 import { UsageMetricRecorderAdapter } from '../../modules/collection-points/infrastructure/metrics/usage-metric-recorder-adapter.js';
 import type { AdminCollectionPointUseCases } from '../../modules/collection-points/presentation/admin-collection-point-routes.js';
@@ -35,6 +37,34 @@ export interface Container {
   readonly listFeedback: ListFeedback;
 }
 
+/**
+ * Qual provedor de geocodificação usar. O Nominatim segue disponível para
+ * desenvolvimento e como escape, mas em produção o IP de nuvem é recusado por
+ * ele — em silêncio, com 200 e lista vazia —, o que torna a API do Google a
+ * escolha padrão de quem roda em Lambda.
+ */
+function createGeocodingService(environment: Environment, logger: Logger): GeocodingService {
+  if (environment.GEOCODING_PROVIDER === 'google') {
+    return new GoogleGeocodingService(
+      {
+        // O schema do ambiente já garante que a chave existe para este provedor.
+        apiKey: environment.GEOCODING_API_KEY ?? '',
+        timeoutMs: environment.GEOCODING_TIMEOUT_MS,
+      },
+      logger,
+    );
+  }
+
+  return new NominatimGeocodingService(
+    {
+      baseUrl: environment.GEOCODING_BASE_URL,
+      userAgent: environment.GEOCODING_USER_AGENT,
+      timeoutMs: environment.GEOCODING_TIMEOUT_MS,
+    },
+    logger,
+  );
+}
+
 export function createContainer(environment: Environment = loadEnvironment()): Container {
   const logger = new StructuredLogger(environment.LOG_LEVEL, {
     environment: environment.ENVIRONMENT,
@@ -56,14 +86,7 @@ export function createContainer(environment: Environment = loadEnvironment()): C
   const registerUsageMetric = new RegisterUsageMetric(metricsRepository, systemClock);
   const metricRecorder = new UsageMetricRecorderAdapter(registerUsageMetric);
 
-  const geocoding = new NominatimGeocodingService(
-    {
-      baseUrl: environment.GEOCODING_BASE_URL,
-      userAgent: environment.GEOCODING_USER_AGENT,
-      timeoutMs: environment.GEOCODING_TIMEOUT_MS,
-    },
-    logger,
-  );
+  const geocoding = createGeocodingService(environment, logger);
 
   return {
     environment,

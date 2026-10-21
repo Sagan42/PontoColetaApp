@@ -130,6 +130,11 @@ Prontos para colar no console. Sem travessão, por escolha de estilo do
 proprietário. Os materiais citados são exatamente os dez de
 `SUGGESTED_MATERIALS`, para a ficha não prometer o que o app não lista.
 
+> **Cada parágrafo é uma linha só, e tem que continuar assim.** A Play preserva
+> quebra de linha: um parágrafo quebrado em 78 colunas para caber bonito num
+> editor sai picotado na ficha, com linha cheia alternando com linha curta.
+> Se for editar, edite sem reflowar.
+
 **Nome do app** (30): `PontoColeta - Londrina`
 
 **Descrição curta** (80): `Encontre onde descartar pilhas, óleo, eletrônicos e mais em Londrina.`
@@ -137,72 +142,51 @@ proprietário. Os materiais citados são exatamente os dez de
 **Descrição completa** (4000):
 
 ```text
-PontoColeta mostra onde descartar corretamente, em Londrina, o que não pode ir
-no lixo comum.
+PontoColeta mostra onde descartar corretamente, em Londrina, o que não pode ir no lixo comum.
 
-Pilhas, baterias, óleo de cozinha usado, eletrônicos, lâmpadas, medicamentos,
-vidro, papel, plástico e metal têm lugar certo para serem entregues. O app
-reúne esses pontos de coleta em um mapa e em uma lista, com endereço, horário
-e o que cada lugar aceita.
+Pilhas, baterias, óleo de cozinha usado, eletrônicos, lâmpadas, medicamentos, vidro, papel, plástico e metal têm lugar certo para serem entregues. O app reúne esses pontos de coleta em um mapa e em uma lista, com endereço, horário e o que cada lugar aceita.
 
-Veja tudo de uma vez
+Veja tudo de uma vez.
 
-Ao abrir o app, você pode ver todos os pontos da cidade no mapa ou em lista,
-sem precisar digitar nada antes.
+Ao abrir o app, você pode ver todos os pontos da cidade no mapa ou em lista, sem precisar digitar nada antes.
 
-Duas formas de buscar
+Duas formas de buscar.
 
-Por endereço: digite a rua onde você está ou para onde vai e veja os pontos
-mais próximos, já ordenados por distância.
+Por endereço: digite a rua onde você está ou para onde vai e veja os pontos mais próximos, já ordenados por distância.
 
 Por material: digite o que você precisa descartar e veja quais lugares aceitam.
 
-O que você encontra em cada ponto
+O que você encontra em cada ponto.
 
-Nome do lugar, endereço completo, distância, materiais aceitos, horário de
-funcionamento e observações úteis, como a entrada ficar pela lateral do
-prédio. Um toque abre a localização no aplicativo de mapas do seu aparelho.
+Nome do lugar, endereço completo, distância, materiais aceitos, horário de funcionamento e observações úteis, como a entrada ficar pela lateral do prédio. Um toque abre a localização no aplicativo de mapas do seu aparelho.
 
-Sem cadastro e sem login
+Sem cadastro e sem login.
 
-Não existe conta para criar. Buscar, consultar e contribuir funcionam sem
-informar nome, e-mail ou telefone.
+Não existe conta para criar. Buscar, consultar e contribuir funcionam sem informar nome, e-mail ou telefone.
 
-O app não pede sua localização
+O app não pede sua localização.
 
-As permissões de GPS ficam bloqueadas no aplicativo. Buscar pelo endereço
-digitado é o caminho principal, e não uma alternativa: você decide de onde
-quer procurar.
+As permissões de GPS ficam bloqueadas no aplicativo. Buscar pelo endereço digitado é o caminho principal, e não uma alternativa: você decide de onde quer procurar.
 
-Feito por quem usa
+Feito por quem usa.
 
-Conhece um ponto de coleta que não está aqui? Cadastre você mesmo, sem conta.
-Informe o nome do lugar, a rua, o número, o bairro e o que ele aceita. O app
-confirma o endereço automaticamente e o ponto passa a aparecer nas buscas.
+Conhece um ponto de coleta que não está aqui? Cadastre você mesmo, sem conta. Informe o nome do lugar, a rua, o número, o bairro e o que ele aceita. O app confirma o endereço automaticamente e o ponto passa a aparecer nas buscas.
 
-Encontrou informação errada, um local que fechou ou conteúdo impróprio?
-Denuncie na própria tela do ponto. A denúncia é anônima e chega direto a quem
-mantém o app.
+Encontrou informação errada, um local que fechou ou conteúdo impróprio? Denuncie na própria tela do ponto. A denúncia é anônima e chega direto a quem mantém o app.
 
-Quer sugerir uma melhoria? O botão de feedback fica sempre à mão, no canto da
-tela. Dar seu nome é opcional.
+Quer sugerir uma melhoria? O botão de feedback fica sempre à mão, no canto da tela. Dar seu nome é opcional.
 
-Sem anúncios
+Sem anúncios.
 
-O PontoColeta não exibe anúncios de nenhum tipo e não tem compras dentro do
-app.
+O PontoColeta não exibe anúncios de nenhum tipo e não tem compras dentro do app.
 
-Área de atendimento
+Área de atendimento.
 
-Por enquanto, apenas Londrina, no Paraná. Pontos fora do município não são
-aceitos no cadastro.
+Por enquanto, apenas Londrina, no Paraná. Pontos fora do município não são aceitos no cadastro.
 
-Privacidade
+Privacidade.
 
-O app coleta o mínimo possível: contadores de uso por dia, que não identificam
-ninguém, e aquilo que você escolhe escrever ao cadastrar um ponto, enviar um
-feedback ou fazer uma denúncia. Seus dados não são compartilhados com
-terceiros.
+O app coleta o mínimo possível: contadores de uso por dia, que não identificam ninguém, e aquilo que você escolhe escrever ao cadastrar um ponto, enviar um feedback ou fazer uma denúncia. Seus dados não são compartilhados com terceiros.
 
 Política de privacidade: https://sagan42.github.io/PontoColetaApp/privacy
 

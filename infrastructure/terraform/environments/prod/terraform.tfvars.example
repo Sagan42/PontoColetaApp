@@ -2,5 +2,11 @@
 aws_region           = "sa-east-1"
 geocoding_user_agent = "PontoColeta/1.0 (contato@seu-dominio.com)"
 
+# Geocodificacao. O Nominatim publico recusa IP de nuvem em silencio (200 com
+# lista vazia), entao producao usa a API do Google. A chave fica so na Lambda,
+# nunca no app, e deve ser restrita a Geocoding API no Google Cloud.
+geocoding_provider = "google"
+geocoding_api_key  = ""
+
 # Obrigatorio: recebe o orcamento e os alarmes de abuso. Sem valor padrao.
 cost_alert_email = "seu-email@exemplo.com"

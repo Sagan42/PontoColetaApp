@@ -16,3 +16,16 @@ variable "cost_alert_email" {
   description = "Address that receives the budget notifications and the abuse alarms of prod."
   type        = string
 }
+
+variable "geocoding_provider" {
+  description = "Geocoding provider: nominatim or google."
+  type        = string
+  default     = "google"
+}
+
+variable "geocoding_api_key" {
+  description = "Google Geocoding API key. Required when geocoding_provider is google."
+  type        = string
+  sensitive   = true
+  default     = ""
+}

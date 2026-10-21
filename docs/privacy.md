@@ -114,7 +114,7 @@ Buscar por endereço digitado é um caminho de primeira classe, não um plano B.
 
 | Serviço                    | O que recebe                          | Quando                             |
 | -------------------------- | ------------------------------------- | ---------------------------------- |
-| **Nominatim (OpenStreetMap)** | o endereço digitado, sem identificação | busca por endereço e cadastro     |
+| **Google (geocodificação)** | o endereço digitado, sem identificação | busca por endereço e cadastro     |
 | **Google Maps (Android)**  | o que qualquer app de mapa envia ao renderizar | ao abrir a aba mapa       |
 | **Amazon Cognito**         | e-mail e senha do administrador        | apenas no login administrativo     |
 | **AWS (API Gateway, Lambda, DynamoDB, CloudWatch)** | as requisições do app | sempre |

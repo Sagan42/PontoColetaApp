@@ -200,12 +200,33 @@ sequenceDiagram
 
 | Serviço                     | Uso                          | Onde fica isolado                        |
 | --------------------------- | ---------------------------- | ---------------------------------------- |
-| Nominatim (OpenStreetMap)   | endereço → coordenadas       | `NominatimGeocodingService` (porta)      |
+| Google Geocoding API        | endereço → coordenadas       | `GoogleGeocodingService` (porta)         |
+| Nominatim (OpenStreetMap)   | endereço → coordenadas, alternativa local | `NominatimGeocodingService` (mesma porta) |
 | Google Maps (Android)       | renderização do mapa         | `CollectionPointsMap`                    |
 | Amazon Cognito              | login administrativo         | `features/admin/auth.ts`                 |
 
 Cada um está atrás de um único arquivo. Trocar qualquer um deles é uma mudança
 local.
+
+### Por que dois geocodificadores
+
+O Nominatim público **recusa requisições vindas de IP de nuvem** e recusa em
+silêncio: devolve `HTTP 200` com lista vazia, que o app traduz como "endereço
+não encontrado". Em 20/10/2026 isso derrubou o cadastro de pontos em produção
+sem acionar um único alarme, porque do ponto de vista do HTTP nada falhou. O
+diagnóstico só fechou ao comparar prod e dev: código idêntico, mesma região,
+mesma configuração, e dev funcionando — o que isolou a causa no IP de saída do
+contêiner.
+
+Por isso `GEOCODING_PROVIDER` passa a valer `google` por padrão, e o adaptador
+do Google traduz o campo `status` da resposta com cuidado: só `ZERO_RESULTS` é
+ausência de endereço; `REQUEST_DENIED`, `OVER_QUERY_LIMIT` e companhia viram
+`ExternalServiceError`, que o cliente vê como 503 e o log registra como `warn`.
+Recusa nunca se disfarça de endereço inexistente.
+
+O Nominatim continua implementado e selecionável. Ele serve para desenvolvimento
+local, onde o IP é residencial, e como escape caso a chave do Google precise ser
+rotacionada às pressas.
 
 ### Política de uso do Nominatim
 

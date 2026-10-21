@@ -31,8 +31,38 @@ variable "log_retention_days" {
   default     = 14
 }
 
+# O Nominatim publico recusa requisicoes vindas de IP de nuvem, e recusa em
+# silencio: HTTP 200 com lista vazia, que o app mostra como "endereco nao
+# encontrado". Por isso o padrao em producao passa a ser a API do Google, que
+# permite uso em servidor e distingue recusa de ausencia de resultado.
+variable "geocoding_provider" {
+  description = "Geocoding provider: nominatim (free, blocked from cloud IPs) or google."
+  type        = string
+  default     = "google"
+
+  validation {
+    condition     = contains(["nominatim", "google"], var.geocoding_provider)
+    error_message = "geocoding_provider must be either nominatim or google."
+  }
+}
+
+variable "geocoding_api_key" {
+  description = "Google Geocoding API key. Required when geocoding_provider is google."
+  type        = string
+  sensitive   = true
+  default     = ""
+
+  # Validacao entre variaveis exige Terraform 1.9, que ja e o minimo do projeto.
+  # Falhar no plan e muito melhor que descobrir no primeiro cadastro de ponto:
+  # sem a chave, a Lambda nem sobe com o provedor google.
+  validation {
+    condition     = var.geocoding_provider != "google" || var.geocoding_api_key != ""
+    error_message = "geocoding_api_key is required when geocoding_provider is google."
+  }
+}
+
 variable "geocoding_base_url" {
-  description = "Base URL of the geocoding provider."
+  description = "Base URL of the geocoding provider. Only used by the nominatim provider."
   type        = string
   default     = "https://nominatim.openstreetmap.org"
 }

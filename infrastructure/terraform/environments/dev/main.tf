@@ -8,6 +8,8 @@ module "stack" {
   log_retention_days = 7
 
   geocoding_user_agent = var.geocoding_user_agent
+  geocoding_provider   = var.geocoding_provider
+  geocoding_api_key    = var.geocoding_api_key
 
   point_in_time_recovery_enabled = false
   deletion_protection_enabled    = false

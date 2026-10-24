@@ -86,12 +86,20 @@ module "admin_lambda" {
   log_retention_days    = var.log_retention_days
   environment_variables = local.common_environment_variables
 
-  # Query reads the metrics; GetItem and TransactWriteItems are what taking a
-  # point off the air needs — read it, then rewrite it with its material links.
-  # No PutItem or DeleteItem: the administrative API never creates or destroys.
+  # Query reads as metricas; GetItem e PutItem sao o que tirar um ponto do ar
+  # exige: ler o item, depois reescrever ele e os vinculos de material.
+  #
+  # PutItem estava faltando e quebrou /hide e /publish em producao com
+  # AccessDeniedException. A transacao do repositorio e feita so de operacoes
+  # Put, e o DynamoDB autoriza cada uma pela acao correspondente: conceder
+  # TransactWriteItems sozinho nao basta, porque nao e ela que o banco confere.
+  #
+  # Continua sem DeleteItem: a API administrativa nunca destroi um ponto, so
+  # muda o estado de um que ja existe.
   dynamodb_actions = [
     "dynamodb:Query",
     "dynamodb:GetItem",
+    "dynamodb:PutItem",
     "dynamodb:TransactWriteItems",
   ]
 

@@ -180,11 +180,32 @@ export class GoogleGeocodingService implements GeocodingService {
    * atendimento continua sendo o domínio, em `isWithinServiceArea`, onde essa
    * regra sempre morou.
    */
+  /**
+   * Acrescenta a cidade ao texto quando ela não está lá.
+   *
+   * `bounds` é só inclinação, não filtro: para uma busca vaga como
+   * "Rua Niterói" o Google ignora a inclinação e devolve uma rua de mesmo nome
+   * em qualquer canto do Paraná. Com a cidade no próprio texto, a resposta
+   * volta para Londrina — e, ao contrário de um filtro por `locality`, isto não
+   * recusa endereço de distrito, onde a localidade que o Google devolve é o
+   * nome do distrito e não o do município.
+   */
+  private withCityHint(query: string): string {
+    const normalized = query
+      .normalize('NFD')
+      .replace(/[̀-ͯ]/g, '')
+      .toLowerCase();
+
+    if (normalized.includes(SERVICE_AREA.cityName.toLowerCase())) return query;
+
+    return `${query}, ${SERVICE_AREA.cityName}, ${SERVICE_AREA.state}, ${SERVICE_AREA.country}`;
+  }
+
   private buildUrl(query: string): string {
     const { bounds } = SERVICE_AREA;
     const url = new URL('/maps/api/geocode/json', this.options.baseUrl ?? DEFAULT_BASE_URL);
 
-    url.searchParams.set('address', query);
+    url.searchParams.set('address', this.withCityHint(query));
     url.searchParams.set('key', this.options.apiKey);
     url.searchParams.set('language', 'pt-BR');
     url.searchParams.set('region', 'br');

@@ -119,7 +119,10 @@ Efeitos de `HIDDEN`:
 - define a partição `CITY#LONDRINA` da tabela;
 - restringe a geocodificação (`viewbox` + `bounded`);
 - rejeita cadastro fora do município;
-- limita o raio de busca a 20 km (padrão 5 km).
+- limita o raio de busca a 20 km (padrão 15 km). O padrão é largo de propósito:
+  busca por bairro cai no centro dele, e 5 km não alcançavam o outro lado da
+  cidade. Como a partição do índice geográfico é geohash de precisão 4, que já
+  contém o município inteiro, alargar quase não custa leitura.
 
 Atender outra cidade é uma decisão de produto, não uma variável de ambiente.
 

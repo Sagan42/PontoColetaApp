@@ -30,7 +30,16 @@ export const keys = {
   pointSortKey: (id: string): string => `POINT#${id}`,
   materialLinkSortKey: (materialSlug: string, id: string): string =>
     `MATERIAL#${materialSlug}#POINT#${id}`,
-  materialLinkPrefix: (materialSlug: string): string => `MATERIAL#${materialSlug}#POINT#`,
+  /**
+   * Prefixo de busca por material. De propósito **não** inclui `#POINT#`: sem
+   * ele, `begins_with` casa o termo com qualquer material que comece por ele, e
+   * "oleo" encontra "oleo-de-cozinha". Buscar o rótulo inteiro deixou de ser
+   * obrigatório, que era o que fazia "óleo" não achar nada.
+   *
+   * Quem extrai o id do ponto é `pointIdFromMaterialLink`, que procura
+   * `#POINT#` em qualquer posição — então um prefixo parcial não o confunde.
+   */
+  materialSearchPrefix: (materialSlug: string): string => `MATERIAL#${materialSlug}`,
   statusPartition: (status: Status): string => `STATUS#${status}`,
   statusSortKey: (createdAt: string, id: string): string => `${createdAt}#${id}`,
   geoPartition: (geohashPrefix: string): string => `GEO#${geohashPrefix}`,

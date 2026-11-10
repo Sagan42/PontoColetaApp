@@ -3,7 +3,7 @@ import { ValidationError } from '../../../../shared/domain/errors/index.js';
 import { UsageMetricType } from '../../../metrics/domain/index.js';
 import { AddressNotFoundError } from '../../domain/errors.js';
 import type { CollectionPointRepository } from '../../domain/repositories/collection-point-repository.js';
-import { SERVICE_AREA } from '../../domain/service-area.js';
+import { SERVICE_AREA, isWithinServiceArea } from '../../domain/service-area.js';
 import { Coordinates } from '../../domain/value-objects/coordinates.js';
 import type { CollectionPointResult, SearchOrigin } from '../dtos/collection-point-result.js';
 import type { GeocodingService } from '../ports/geocoding-service.js';
@@ -73,12 +73,22 @@ export class SearchCollectionPointsByLocation {
     }
 
     const results = await this.geocoding.search(address);
-    const first = results[0];
-    if (!first) {
+
+    // O provedor pode devolver uma rua de mesmo nome em outra cidade. Aceitar
+    // a primeira resposta cegamente fazia a busca rodar longe de Londrina e
+    // voltar vazia, sem erro — parecia que não havia pontos, quando na verdade
+    // o centro da busca estava a 300 km daqui. Vale a primeira que cai dentro
+    // da área atendida; nenhuma cair é endereço não encontrado.
+    const inside = results.find((result) => isWithinServiceArea(result.coordinates));
+    if (!inside) {
+      this.logger.warn('geocoding.outside_service_area', {
+        operation: 'SearchCollectionPointsByLocation',
+        resultCount: results.length,
+      });
       throw new AddressNotFoundError();
     }
 
-    return { coordinates: first.coordinates, formattedAddress: first.formattedAddress };
+    return { coordinates: inside.coordinates, formattedAddress: inside.formattedAddress };
   }
 
   private async recordMetric(): Promise<void> {

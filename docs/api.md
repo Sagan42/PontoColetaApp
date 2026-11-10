@@ -306,7 +306,8 @@ Limites impostos pelo backend:
 | Mensagem do feedback        | 3–1000 caracteres        |
 | Detalhes da denúncia        | 500 caracteres (opcional)|
 | `limit`                     | 1–100 (padrão 50)        |
-| `radiusKm`                  | até 20 km efetivos       |
+| `radiusKm`                  | até 20 km (padrão 15 km) |
+| Termo de material           | casa por **prefixo**: `oleo` encontra `oleo-de-cozinha` |
 | Período de métricas         | até 366 dias             |
 | Throttling (dev / prod)     | 10 / 50 req/s            |
 

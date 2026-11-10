@@ -13,7 +13,19 @@ export const SERVICE_AREA = {
     maxLongitude: -50.85,
   },
   maxSearchRadiusKm: 20,
-  defaultSearchRadiusKm: 5,
+
+  /**
+   * Buscar por um bairro cai no centro dele, e 5 km não alcançavam o outro lado
+   * da cidade: quem procurava "Centro" via lista vazia tendo pontos a 7 km.
+   * 15 km cobrem a área urbana inteira a partir de qualquer ponto dela.
+   *
+   * Alargar quase não custa leitura: a partição do índice geográfico é geohash
+   * de precisão 4, que já contém o município inteiro, então o raio maior visita
+   * praticamente as mesmas células. E o resultado continua ordenado por
+   * distância, com o mais perto em cima — um ponto distante no fim da lista é
+   * informação, enquanto lista vazia não é.
+   */
+  defaultSearchRadiusKm: 15,
 } as const;
 
 export function isWithinServiceArea(coordinates: Coordinates): boolean {

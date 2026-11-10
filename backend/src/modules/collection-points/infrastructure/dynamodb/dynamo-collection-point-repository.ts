@@ -222,7 +222,7 @@ export class DynamoCollectionPointRepository implements CollectionPointRepositor
           KeyConditionExpression: 'PK = :partition AND begins_with(SK, :prefix)',
           ExpressionAttributeValues: {
             ':partition': keys.cityPartition(),
-            ':prefix': keys.materialLinkPrefix(materialSlug),
+            ':prefix': keys.materialSearchPrefix(materialSlug),
           },
           Limit: request.limit,
           ExclusiveStartKey: startKey,

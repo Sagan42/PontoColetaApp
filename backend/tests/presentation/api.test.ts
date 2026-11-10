@@ -125,7 +125,7 @@ describe('public API', () => {
       });
 
       expect(response.statusCode).toBe(200);
-      expect(response.body.meta?.radiusKm).toBe(5);
+      expect(response.body.meta?.radiusKm).toBe(15);
       expect(response.body.data).toMatchObject([{ distanceKm: 0 }]);
     });
 

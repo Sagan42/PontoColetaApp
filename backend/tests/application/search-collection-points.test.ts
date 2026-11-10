@@ -123,9 +123,79 @@ describe('collection point queries', () => {
       const result = await useCase.execute({ address: 'Rua Pará, 500', limit: 50 });
 
       expect(result.origin.formattedAddress).toContain('Londrina');
-      expect(result.items.map((item) => item.point.id)).toEqual(['a', 'b']);
+      expect(result.items.map((item) => item.point.id)).toEqual(['a', 'b', 'c']);
       expect(result.items[0]?.distanceKm).toBe(0);
       expect(result.items[1]?.distanceKm).toBeGreaterThan(0);
+    });
+
+    it('alcança o outro lado da cidade com o raio padrão', async () => {
+      const geocoding = new FakeGeocodingService();
+      const useCase = new SearchCollectionPointsByLocation(
+        repository,
+        geocoding,
+        metrics,
+        silentLogger,
+      );
+
+      const result = await useCase.execute({ address: 'Centro', limit: 50 });
+
+      // O ponto 'c' está a mais de 5 km da origem. Com o raio antigo ele ficava
+      // de fora e a busca por bairro parecia não ter resultado nenhum.
+      const loja = result.items.find((item) => item.point.id === 'c');
+      expect(loja).toBeDefined();
+      expect(loja?.distanceKm).toBeGreaterThan(5);
+      expect(result.radiusKm).toBe(15);
+    });
+
+    it('recusa endereço que o provedor resolveu fora da área atendida', async () => {
+      const geocoding = new FakeGeocodingService();
+      // Uma "Rua Niterói" de outra cidade do Paraná, que foi o caso real.
+      geocoding.respondWith([
+        {
+          formattedAddress: 'R. Niterói, Paraná, Brasil',
+          coordinates: Coordinates.create(-25.146107, -53.851008),
+          confidence: 0.5,
+        },
+      ]);
+
+      const useCase = new SearchCollectionPointsByLocation(
+        repository,
+        geocoding,
+        metrics,
+        silentLogger,
+      );
+
+      await expect(useCase.execute({ address: 'Rua Niterói', limit: 50 })).rejects.toThrow(
+        AddressNotFoundError,
+      );
+    });
+
+    it('prefere o resultado dentro da área quando o provedor devolve vários', async () => {
+      const geocoding = new FakeGeocodingService();
+      geocoding.respondWith([
+        {
+          formattedAddress: 'R. Niterói, Cascavel, PR',
+          coordinates: Coordinates.create(-25.146107, -53.851008),
+          confidence: 0.5,
+        },
+        {
+          formattedAddress: 'Rua Niterói, Londrina, PR',
+          coordinates: Coordinates.create(-23.3103, -51.1628),
+          confidence: 0.4,
+        },
+      ]);
+
+      const useCase = new SearchCollectionPointsByLocation(
+        repository,
+        geocoding,
+        metrics,
+        silentLogger,
+      );
+
+      const result = await useCase.execute({ address: 'Rua Niterói', limit: 50 });
+
+      expect(result.origin.formattedAddress).toContain('Londrina');
+      expect(result.items.length).toBeGreaterThan(0);
     });
 
     it('accepts explicit coordinates without geocoding', async () => {

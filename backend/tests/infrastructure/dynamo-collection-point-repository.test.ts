@@ -161,8 +161,24 @@ describe('DynamoCollectionPointRepository', () => {
     expect(page.items.map((point) => point.id)).toEqual(['point-1']);
     expect(sent.map((command) => command.name)).toEqual(['QueryCommand', 'BatchGetCommand']);
     expect(sent[0]?.input.ExpressionAttributeValues).toMatchObject({
-      ':prefix': 'MATERIAL#pilhas#POINT#',
+      ':prefix': 'MATERIAL#pilhas',
     });
+  });
+
+  it('casa material por prefixo, para "oleo" encontrar "oleo-de-cozinha"', async () => {
+    const { client, sent } = stubClient([
+      { Items: [{ SK: 'MATERIAL#oleo-de-cozinha#POINT#point-1' }] },
+      { Responses: { [TABLE]: [toItem(buildPoint('point-1'))] } },
+    ]);
+    const repository = new DynamoCollectionPointRepository(client, TABLE, silentLogger);
+
+    const page = await repository.findByMaterialSlug('oleo', { limit: 10 });
+
+    // O prefixo não inclui #POINT#: é isso que deixa o termo parcial casar.
+    expect(sent[0]?.input.ExpressionAttributeValues).toMatchObject({
+      ':prefix': 'MATERIAL#oleo',
+    });
+    expect(page.items.map((point) => point.id)).toEqual(['point-1']);
   });
 
   it('does not issue a batch get when no point accepts the material', async () => {

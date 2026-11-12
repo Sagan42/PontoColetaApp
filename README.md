@@ -1,5 +1,9 @@
 # PontoColeta
 
+### Projeto concebido em disciplina de atividade extensionista
+### Centro Universitário Internacional (UNINTER)
+### Matrícula de estudante: 4500715
+
 Aplicativo mobile para encontrar locais adequados ao descarte de materiais
 especiais em **Londrina** e para cadastrar novos pontos de coleta. Simples, útil
 e confiável.

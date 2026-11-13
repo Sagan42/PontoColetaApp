@@ -16,7 +16,7 @@ flowchart TD
     DOM["Domain<br/>regras e invariantes"]
     REPO["Portas de repositório"]
     DB[("Amazon DynamoDB<br/>tabela única")]
-    GEO["Nominatim<br/>geocodificação"]
+    GEO["Google Geocoding<br/>geocodificação"]
     CW["Amazon CloudWatch Logs"]
 
     U --> A
@@ -49,7 +49,7 @@ flowchart LR
     P["Presentation<br/>handlers, rotas, schemas HTTP"]
     AP["Application<br/>casos de uso, portas"]
     D["Domain<br/>entidades, VOs, invariantes"]
-    I["Infrastructure<br/>DynamoDB, Nominatim, logs"]
+    I["Infrastructure<br/>DynamoDB, geocodificação, logs"]
 
     P --> AP
     AP --> D
@@ -65,7 +65,7 @@ HTTP, Terraform, Expo nem React Native.
 | ------------------ | --------------------------------------------------------- | ------------------------------------------------------------------------ |
 | **Domain**         | Conceitos e regras que existiriam sem computador           | `CollectionPoint`, `Material`, `Coordinates`, `SERVICE_AREA`, Haversine   |
 | **Application**    | Orquestração de um caso de uso, dependendo só de abstrações| `CreateCollectionPoint`, `SearchCollectionPointsByLocation`, `HideCollectionPoint` |
-| **Infrastructure** | Implementações concretas                                   | `DynamoCollectionPointRepository`, `NominatimGeocodingService`, logger    |
+| **Infrastructure** | Implementações concretas                                   | `DynamoCollectionPointRepository`, `GoogleGeocodingService`, logger      |
 | **Presentation**   | Contrato HTTP, validação estrutural, códigos de status     | `collection-point-routes.ts`, `error-mapper.ts`, `Router`                 |
 
 ## Módulos
@@ -96,19 +96,26 @@ nunca derruba a operação medida: falha é logada em `warn` e engolida.
 
 Duas funções ([ADR-005](decisions/ADR-005-http-api-e-duas-lambdas.md)):
 
-| Função       | Memória | Timeout | Permissões DynamoDB                              |
-| ------------ | ------- | ------- | ------------------------------------------------ |
-| `public-api` | 512 MB  | 15 s    | GetItem, BatchGetItem, Query, PutItem, UpdateItem |
-| `admin-api`  | 256 MB  | 10 s    | Query, GetItem, TransactWriteItems               |
+| Função       | Memória | Timeout | Permissões DynamoDB                                 |
+| ------------ | ------- | ------- | --------------------------------------------------- |
+| `public-api` | 512 MB  | 8 s     | GetItem, BatchGetItem, Query, PutItem, UpdateItem    |
+| `admin-api`  | 256 MB  | 10 s    | Query, GetItem, PutItem, TransactWriteItems          |
 
 Ambas em `arm64` (Graviton, ~20% mais barato) e runtime `nodejs22.x`. O
 container é construído uma vez por container (fora do handler), então clientes
 HTTP e DynamoDB são reaproveitados entre invocações.
 
 A `admin-api` lê métricas (`Query`) e modera pontos: `GetItem` para carregar o
-ponto e `TransactWriteItems` para reescrevê-lo com seus itens de material. Sem
-`PutItem` e sem `DeleteItem` — a API administrativa nunca cria nem destrói
-ponto, só muda o estado de um que já existe.
+ponto e `TransactWriteItems` para reescrevê-lo com seus itens de material.
+
+`PutItem` aparece na lista por um detalhe que custou uma falha em produção: o
+IAM **não** autoriza `TransactWriteItems` como um bloco. Cada operação dentro da
+transação é autorizada pela ação correspondente a ela, então um `Put` dentro da
+transação exige `dynamodb:PutItem` mesmo que nenhuma chamada a `PutItem` exista
+no código. Sem ela, ocultar um ponto falhava com `AccessDeniedException`.
+
+Continua sem `DeleteItem`: a API administrativa nunca destrói ponto, só muda o
+estado de um que já existe.
 
 ## Ciclo de vida do ponto de coleta
 
@@ -179,14 +186,15 @@ sequenceDiagram
     participant A as App
     participant G as API Gateway
     participant L as Lambda public-api
-    participant N as Nominatim
+    participant N as Geocodificador
     participant D as DynamoDB
 
     P->>A: digita "Rua Pará, 500"
     A->>G: GET /v1/collection-points/nearby?address=...
     G->>L: evento (payload v2)
-    L->>N: geocodifica (viewbox de Londrina)
-    N-->>L: coordenadas
+    L->>N: geocodifica (texto + ", Londrina, PR, Brasil")
+    N-->>L: resultados
+    L->>L: descarta o que cair fora da área de atendimento
     L->>D: Query GSI2-geo nas células que cobrem o raio
     D-->>L: candidatos
     L->>L: filtra e ordena por Haversine

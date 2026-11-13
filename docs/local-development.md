@@ -126,9 +126,15 @@ npx eas build --profile development --platform android
 o `localhost` da máquina. Em dispositivo físico, use o IP da máquina na rede
 local.
 
-O mapa precisa de uma chave do Google Maps para Android
-(`android.config.googleMaps.apiKey` em `app.json`, hoje um placeholder) e de uma
-imagem de emulador **com Google Play Services**.
+O mapa precisa de uma chave do Google Maps para Android e de uma imagem de
+emulador **com Google Play Services**. A chave sai de
+`GOOGLE_MAPS_ANDROID_API_KEY` no `.env` e entra no manifesto via
+`app.config.js`; o `app.json` não a contém, justamente para que ela não seja
+commitada. Sem a variável o valor é vazio, e o app cai na lista em vez do mapa.
+
+Essa chave é **diferente** da usada pelo backend para geocodificar: esta vai no
+pacote Android e é restrita por impressão digital do certificado, enquanto a de
+geocodificação fica só na Lambda.
 
 ## Terraform local
 

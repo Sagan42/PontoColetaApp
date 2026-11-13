@@ -117,12 +117,24 @@ Efeitos de `HIDDEN`:
 `SERVICE_AREA` (Londrina/PR) é regra de negócio, não configuração:
 
 - define a partição `CITY#LONDRINA` da tabela;
-- restringe a geocodificação (`viewbox` + `bounded`);
+- inclina a geocodificação para o município **e confere o resultado**;
 - rejeita cadastro fora do município;
-- limita o raio de busca a 20 km (padrão 15 km). O padrão é largo de propósito:
-  busca por bairro cai no centro dele, e 5 km não alcançavam o outro lado da
-  cidade. Como a partição do índice geográfico é geohash de precisão 4, que já
-  contém o município inteiro, alargar quase não custa leitura.
+- limita o raio de busca a 20 km (padrão 15 km).
+
+Sobre a conferência do resultado: inclinar não basta. O adaptador acrescenta
+`, Londrina, PR, Brasil` ao texto quando a cidade não aparece nele, e envia
+`bounds` do município — mas `bounds` é **viés, não filtro**, e para uma busca
+vaga o provedor devolve uma rua homônima em outra cidade. Por isso vale o
+primeiro resultado que `isWithinServiceArea` aceitar; nenhum dentro da área é
+endereço não encontrado. Sem essa conferência, buscar "Rua Niterói" centrava a
+busca a centenas de quilômetros e devolvia lista vazia, sem erro algum.
+
+Sobre o raio padrão: busca por bairro cai no centro dele, e 5 km não alcançavam
+o outro lado da cidade. Alargar não custa leitura nenhuma, e isso foi medido: a
+cobertura de 5 km a partir do centro já era o bloco de 3x3 partições de geohash
+4 ao redor da origem, exatamente as mesmas 9 que 15 km visita. Londrina ocupa 5
+dessas partições, não uma — o que não cresce aqui é o bloco, não o município.
+Em 20 km o bloco salta para 25 partições, e é nesse degrau que o teto segura.
 
 Atender outra cidade é uma decisão de produto, não uma variável de ambiente.
 
@@ -135,8 +147,8 @@ Atender outra cidade é uma decisão de produto, não uma variável de ambiente.
 | `CreateCollectionPoint`            | nome, endereço, materiais, etc.  | geocodifica, valida área, detecta duplicata, publica, conta métrica                                |
 | `GetCollectionPoint`               | id                               | ponto oculto responde como inexistente                                                             |
 | `ListCollectionPoints`             | limite, cursor                   | só publicados, mais recentes primeiro                                                              |
-| `SearchCollectionPointsByMaterial` | texto do material                | normaliza para slug antes de consultar; conta métrica                                              |
-| `SearchCollectionPointsByLocation` | endereço **ou** lat/lng, raio    | GPS nunca obrigatório; limita o raio; ordena por distância; conta métrica                           |
+| `SearchCollectionPointsByMaterial` | texto do material                | normaliza para slug e casa por **prefixo**: `oleo` encontra `oleo-de-cozinha`; conta métrica        |
+| `SearchCollectionPointsByLocation` | endereço **ou** lat/lng, raio    | GPS nunca obrigatório; exige origem dentro da área; limita o raio; ordena por distância; conta métrica |
 
 #### Resolução de coordenadas no cadastro
 

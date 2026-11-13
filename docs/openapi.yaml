@@ -9,8 +9,9 @@ info:
     Consultar, buscar e cadastrar são operações públicas: usuários comuns não
     possuem conta. Apenas `/v1/admin/*` exige autenticação.
 
-    Esta especificação descreve a implementação em `backend/src`. Ela ainda não
-    foi publicada: nenhum recurso AWS foi provisionado.
+    Esta especificação descreve a implementação em `backend/src`. Os ambientes
+    `dev` e `prod` estão provisionados; a URL de cada um sai do output
+    `api_endpoint` do Terraform e não é publicada aqui.
   license:
     name: MIT
 

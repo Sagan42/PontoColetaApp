@@ -1,10 +1,16 @@
 # Deploy
 
-> **Este documento descreve um processo FUTURO.**
+> **Os ambientes `dev` e `prod` estão provisionados e em uso.** Este documento
+> deixou de descrever um processo futuro: é o procedimento que foi executado e
+> que continua valendo para cada alteração.
 >
-> Nenhum recurso AWS foi criado, alterado ou removido. `terraform plan` está
-> pendente por ausência deliberada de credenciais e `terraform apply` **não deve
-> ser executado** sem revisão do plan e autorização explícita do proprietário.
+> Não existe pipeline de deploy. `terraform apply` é sempre manual e **não deve
+> ser executado** sem revisão do plan.
+>
+> O state é local e vive em uma única máquina
+> ([ADR-007](decisions/ADR-007-terraform-state-e-ambientes.md)). Perder essa
+> máquina significa perder o state, e é a fragilidade conhecida mais séria da
+> operação hoje.
 
 ## Ordem geral
 
@@ -97,7 +103,7 @@ Produz `backend/dist/lambdas/public-api/` e `backend/dist/lambdas/admin-api/`.
 
 ```bash
 cd infrastructure/terraform/environments/dev
-cp terraform.tfvars.example terraform.tfvars    # ajuste região e User-Agent
+cp terraform.tfvars.example terraform.tfvars    # ajuste região, User-Agent e geocodificação
 
 export AWS_PROFILE=pontocoleta-dev
 terraform init
@@ -105,6 +111,26 @@ terraform fmt -check
 terraform validate
 terraform plan -out=tfplan
 ```
+
+No PowerShell, `export` não existe e a linha equivalente é
+`$env:AWS_PROFILE = "pontocoleta-dev"`. Vale lembrar que essa variável vive
+apenas naquela janela: um terminal novo volta a não ter credencial e o Terraform
+falha com `No valid credential sources found`, já que não existe perfil
+`[default]` e o `providers.tf` não fixa `profile`.
+
+### Geocodificação
+
+`geocoding_provider` vale `google` por padrão, e nesse modo
+`geocoding_api_key` é **obrigatória**. A validação está na própria variável, de
+modo que a ausência da chave falha no `plan` em vez de aparecer no primeiro
+cadastro de ponto. A chave sai do Google Cloud, deve ser restrita à Geocoding
+API e fica somente na Lambda, nunca no aplicativo — ela é diferente da chave do
+Maps, que vai no manifesto Android e é restrita por impressão digital.
+
+Para desenvolvimento local, `geocoding_provider = "nominatim"` dispensa chave.
+Não use isso em produção: a instância pública recusa IP de nuvem em silêncio,
+o que é a origem do incidente registrado na
+[ADR-004](decisions/ADR-004-geocodificacao-nominatim.md#atualização--2026-10-20).
 
 ### O que revisar no plan
 

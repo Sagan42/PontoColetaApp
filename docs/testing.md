@@ -118,6 +118,13 @@ repositório real), `FakeGeocodingService`, `InMemoryMetricsRepository`,
   busca à área de atendimento, o `User-Agent` exigido pela política é enviado,
   resultados inválidos são descartados, o cache evita a segunda chamada, e
   falhas viram `ExternalServiceError` sem vazar detalhes.
+- **`google-geocoding-service.test.ts`** — o adaptador de produção, com `fetch`
+  mockado. O teste central é a tradução do campo `status`: só `ZERO_RESULTS` é
+  endereço inexistente, e `REQUEST_DENIED` e companhia viram
+  `ExternalServiceError` — a regressão que este arquivo existe para impedir é
+  recusa se disfarçar de endereço não encontrado. Cobre também a dica de cidade
+  no texto da busca, a chave nunca aparecer na mensagem de erro, retentativa só
+  para falha repetível, confiança derivada do tipo de localização e o cache.
 
 ### Apresentação (`tests/presentation/`)
 

@@ -1,6 +1,6 @@
 # ADR-005 — API Gateway HTTP API e duas Lambdas
 
-**Status:** aceito · **Data:** 2026-08-22
+**Status:** aceito, com atualização · **Data:** 2026-08-22
 
 ## Contexto
 
@@ -54,3 +54,24 @@ O roteamento interno é feito por um `Router` de ~60 linhas, sem framework HTTP.
 - HTTP API não oferece validação de requisição no gateway; a validação é toda da
   aplicação (zod na camada de apresentação). Aceitável, e é onde as mensagens em
   português já são produzidas.
+
+## Atualização — 2026-10-24
+
+A decisão de duas Lambdas continua valendo. Duas afirmações do texto acima
+envelheceram e ficam registradas aqui, em vez de serem reescritas acima, para
+que o histórico da decisão permaneça legível.
+
+**A API cresceu de oito para treze rotas.** Entraram métricas administrativas,
+feedback, denúncia de ponto e o ciclo de vida (`hide` e `publish`). A divisão
+entre pública e administrativa não mudou.
+
+**A função administrativa deixou de "só saber ler".** Moderar um ponto é
+reescrevê-lo, então ela ganhou `TransactWriteItems` e, depois, `PutItem`. O
+`PutItem` não corresponde a nenhuma chamada no código: o IAM autoriza cada
+operação dentro de uma transação pela ação equivalente a ela, e a transação
+contém um `Put`. Faltando essa permissão, ocultar um ponto falhava com
+`AccessDeniedException` — o que de fato ocorreu em produção.
+
+A permissão atual está em [architecture.md](../architecture.md#lambdas). O
+privilégio mínimo segue valendo no que importa: a função administrativa não
+pode apagar nada, e a pública não alcança rota administrativa.

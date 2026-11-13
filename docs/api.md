@@ -3,8 +3,8 @@
 REST versionada em `/v1`. A especificação formal é
 [`openapi.yaml`](openapi.yaml) e reflete a implementação em `backend/src`.
 
-Base URL: o output `api_endpoint` do Terraform do ambiente. Nenhum ambiente foi
-provisionado ainda.
+Base URL: o output `api_endpoint` do Terraform do ambiente. Os ambientes `dev` e
+`prod` estão provisionados; a URL não é fixa no código e sai do output.
 
 ## Convenções
 

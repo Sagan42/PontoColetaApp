@@ -1,6 +1,6 @@
 # ADR-007 — Estratégia de state e isolamento de ambientes no Terraform
 
-**Status:** aceito · **Data:** 2026-08-22
+**Status:** aceito, com risco em aberto · **Data:** 2026-08-22
 
 ## Contexto
 
@@ -62,3 +62,24 @@ limites de concorrência em produção).
   (providers, variables, outputs). É o preço do isolamento.
 - Enquanto o state for local, ele não é compartilhado nem versionado — aceitável
   apenas porque nada foi provisionado ainda.
+
+## Atualização — 2026-11-13
+
+**A condição que tornava o state local aceitável deixou de valer.** A linha
+acima diz, textualmente, que a falta de versionamento é tolerável "porque nada
+foi provisionado ainda". Hoje `prod` existe, atende um app publicado na Google
+Play e seu state descreve toda essa infraestrutura.
+
+O que não mudou: nenhum bloco `backend` está ativo, os arquivos
+`environments/*/backend.tf.example` continuam prontos, e o bucket do
+`bootstrap` **nunca foi criado**.
+
+O que mudou é a consequência de perder o arquivo. Sem state, o Terraform não
+reconhece os recursos existentes: um `apply` tentaria recriar o que já está lá e
+falharia por nome duplicado, e a saída seria importar recurso por recurso. O
+state também guarda valores sensíveis em texto, incluindo `geocoding_api_key` —
+por isso `*.tfstate` está no `.gitignore` e nunca entrou no histórico.
+
+**Migrar para o backend remoto é a pendência operacional mais importante do
+projeto.** O procedimento já está descrito: aplicar o `bootstrap`, renomear
+`backend.tf.example` e rodar `terraform init -migrate-state`.

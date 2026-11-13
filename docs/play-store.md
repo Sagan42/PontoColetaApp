@@ -232,7 +232,7 @@ O texto deve declarar, no mínimo:
 2. quais não coleta (nada que identifique quem busca; sem GPS; sem identificador
    de publicidade);
 3. a finalidade de cada coleta;
-4. os serviços de terceiros (Nominatim, Google Maps, AWS);
+4. os serviços de terceiros (Google Geocoding, Google Maps, AWS);
 5. um **endereço de e-mail** para pedidos de correção ou remoção;
 6. a data da última atualização.
 

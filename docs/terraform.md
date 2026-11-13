@@ -165,7 +165,9 @@ próximo passo na [ADR-008](decisions/ADR-008-protecao-contra-abuso.md).
 | `project_name`                      | `pontocoleta` | prefixo dos nomes                             |
 | `log_level`                         | `info`   | nível mínimo dos logs das Lambdas                  |
 | `log_retention_days`                | `14`     | retenção dos log groups                            |
-| `geocoding_base_url`                | Nominatim| endpoint do provedor de geocodificação             |
+| `geocoding_provider`                | `google` | `google` ou `nominatim`; valor inválido falha no `plan` |
+| `geocoding_api_key`                 | `""`     | chave da Google Geocoding API; **obrigatória** quando o provedor é `google`, validada no `plan` |
+| `geocoding_base_url`                | Nominatim| endpoint do provedor; **usado só** pelo `nominatim` |
 | `geocoding_user_agent`              | —        | identificação exigida pela política do provedor    |
 | `geocoding_timeout_ms`              | `4000`   | timeout da geocodificação                          |
 | `public_lambda_memory_size`         | `512`    | memória da função pública                          |

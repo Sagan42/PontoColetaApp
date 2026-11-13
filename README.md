@@ -13,10 +13,11 @@ e confiável.
 Relacionado aos Objetivos de Desenvolvimento Sustentável **ODS 11** (Cidades e
 Comunidades Sustentáveis) e **ODS 12** (Consumo e Produção Responsáveis).
 
-> **Nenhum recurso AWS é provisionado automaticamente.**
-> A infraestrutura está escrita, formatada, inicializada e validada localmente
-> em Terraform, mas **não foi aplicada**. `terraform apply` só deve ser
-> executado após revisão do plan e autorização explícita do proprietário.
+> **O app está publicado na Google Play**, em trilha de teste fechado, com os
+> ambientes `dev` e `prod` provisionados na AWS.
+>
+> Nada é provisionado automaticamente: não há pipeline de deploy. `terraform
+> apply` é sempre manual e só deve ser executado após revisão do plan.
 > Ver [docs/deployment.md](docs/deployment.md).
 
 ## O que o app faz
@@ -51,7 +52,7 @@ Comunidades Sustentáveis) e **ODS 12** (Consumo e Produção Responsáveis).
 | API             | Amazon API Gateway HTTP API v2                                 |
 | Persistência    | Amazon DynamoDB (tabela única)                                 |
 | Autenticação    | Amazon Cognito (somente administrativo)                        |
-| Geocodificação  | Nominatim / OpenStreetMap                                      |
+| Geocodificação  | Google Geocoding API (Nominatim selecionável para uso local)   |
 | Observabilidade | Amazon CloudWatch Logs                                         |
 | Infraestrutura  | Terraform (única fonte de verdade)                             |
 | Build Lambda    | esbuild                                                        |
@@ -253,7 +254,7 @@ Ver [docs/privacy.md](docs/privacy.md).
 | [ADR-001](docs/decisions/ADR-001-ddd-pragmatico.md)                      | DDD pragmático                           |
 | [ADR-002](docs/decisions/ADR-002-dynamodb-single-table-e-proximidade.md) | Single-table, itens auxiliares e geohash |
 | [ADR-003](docs/decisions/ADR-003-autenticacao-administrativa-cognito.md) | Cognito para o acesso administrativo     |
-| [ADR-004](docs/decisions/ADR-004-geocodificacao-nominatim.md)            | Nominatim como geocodificador            |
+| [ADR-004](docs/decisions/ADR-004-geocodificacao-nominatim.md)            | Geocodificação: Nominatim, substituído pelo Google em produção |
 | [ADR-005](docs/decisions/ADR-005-http-api-e-duas-lambdas.md)             | HTTP API e duas Lambdas                  |
 | [ADR-006](docs/decisions/ADR-006-esbuild-para-empacotar-lambdas.md)      | esbuild para empacotar                   |
 | [ADR-007](docs/decisions/ADR-007-terraform-state-e-ambientes.md)         | State do Terraform e ambientes           |
